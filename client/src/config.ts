@@ -16,8 +16,8 @@ export const CONFIG = {
   
   CUBE_SIZE: 1000,
   get MAX_SPEED() { return this.CUBE_SIZE / 20; }, // V_max defined by 20s to cross Cube L
-  ACCEL_SPEED: 0.5,
-  ACCEL_ROT: 0.02,
+  ACCEL_SPEED: 0.05,
+  ACCEL_ROT: 0.002,
   DAMPING_ROT: 0.98,
   
   CAMERA_OFFSET: { x: 0, y: 5, z: -15 },
