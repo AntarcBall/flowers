@@ -28,17 +28,17 @@ export const CONFIG = {
   SCROLL_SPEED: 5.0,
   STORAGE_KEY: 'garden_flowers',
 
-  CONE_ANGLE_THRESHOLD: Math.PI / 12, 
+  CONE_ANGLE_THRESHOLD: Math.PI / 7, 
   TEXT_LOD_DISTANCE: 150, 
 
   TEXT_STYLE: {
     color: 'black',
     background: 'white',
-    padding: '4px 8px',
+    padding: '4px 6px',
     borderRadius: '4px',
-    fontSize: '12px',
+    fontSize: '140px',
     fontWeight: 'bold',
-    opacity: 0.9,
+    opacity: 1,
   },
 
   PREVIEW: {
