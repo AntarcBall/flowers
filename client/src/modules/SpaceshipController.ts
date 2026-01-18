@@ -40,4 +40,8 @@ export class SpaceshipController {
     
     return warped;
   }
+
+  getForwardVector() {
+    return new Vector3(0, 0, 1).applyQuaternion(this.quaternion).normalize();
+  }
 }

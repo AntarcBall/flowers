@@ -15,16 +15,19 @@ export const CONFIG = {
   },
   
   CUBE_SIZE: 1000,
-  get MAX_SPEED() { return this.CUBE_SIZE / 1; }, // V_max defined by 20s to cross Cube L
-  ACCEL_SPEED: 0.01,
-  ACCEL_ROT: 0.0002,
+  get MAX_SPEED() { return this.CUBE_SIZE / 20; }, // V_max defined by 20s to cross Cube L
+  ACCEL_SPEED: 0.5,
+  ACCEL_ROT: 0.02,
   DAMPING_ROT: 0.98,
   
-  CAMERA_OFFSET: { x: 0, y: 5, z: -5 },
+  CAMERA_OFFSET: { x: 0, y: 5, z: -15 },
   CAMERA_LOOK_TARGET_DIST: 10,
   CAMERA_LERP_FACTOR: 0.1,
 
   GARDEN_SIZE: 1000,
   SCROLL_SPEED: 5.0,
   STORAGE_KEY: 'garden_flowers',
+
+  CONE_ANGLE_THRESHOLD: Math.PI / 12, // 15 degrees cone
+  TEXT_LOD_DISTANCE: 150, 
 };
