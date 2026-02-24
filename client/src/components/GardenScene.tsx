@@ -78,7 +78,7 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: StarSelect
         const progress = Math.min(1, Math.max(0, (Date.now() - plantedAt) / CONFIG.FLOWER_GROWTH_MS));
         return (
           <group key={flower.id} position={[flower.x, flower.y, CONFIG.FLOWER_ANCHOR_Z]}>
-            <Flower params={flower.params} color={flower.color} scale={13} growth={progress} />
+            <Flower params={flower.params} color={flower.color} scale={104} growth={progress} />
           </group>
         );
       })}
