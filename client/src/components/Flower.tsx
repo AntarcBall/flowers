@@ -61,7 +61,7 @@ export const Flower = ({
                     <meshBasicMaterial color={color} side={DoubleSide} />
                 </mesh>
             )}
-            
+             
              <line>
                 <bufferGeometry>
                     <bufferAttribute 
@@ -71,11 +71,6 @@ export const Flower = ({
                 </bufferGeometry>
                 <lineBasicMaterial color={color} linewidth={2} />
              </line>
-             
-             <mesh>
-                 <circleGeometry args={[0.08, 16]} />
-                 <meshBasicMaterial color="#ffd700" />
-             </mesh>
         </group>
     );
 };
