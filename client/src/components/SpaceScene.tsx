@@ -4,7 +4,7 @@ import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
 import { SelectionSystem } from '../modules/SelectionSystem';
 import { useInput } from '../hooks/useInput';
-import { Vector3, Group, PerspectiveCamera, AdditiveBlending } from 'three';
+import { Vector3, Group, PerspectiveCamera, AdditiveBlending, BackSide, CanvasTexture, LinearFilter } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
 import { CONFIG } from '../config';
@@ -54,6 +54,65 @@ export const SpaceScene = ({
   const BACKGROUND_STAR_RADIUS_MIN = 900;
   const BACKGROUND_STAR_RADIUS_MAX = 2200;
   const CAMERA_FAR_DISTANCE = 5000;
+
+  const skyDomeTexture = useMemo(() => {
+    const width = 2048;
+    const height = 1024;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const base = ctx.createLinearGradient(0, 0, 0, height);
+    base.addColorStop(0, '#01040b');
+    base.addColorStop(0.5, '#020814');
+    base.addColorStop(1, '#020208');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, width, height);
+
+    for (let i = 0; i < 8; i++) {
+      const y = height * (0.28 + i * 0.055);
+      const band = ctx.createRadialGradient(width * 0.5, y, width * 0.06, width * 0.5, y, width * 0.6);
+      band.addColorStop(0, 'rgba(150, 185, 255, 0.09)');
+      band.addColorStop(0.45, 'rgba(98, 132, 225, 0.06)');
+      band.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = band;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    const drawStar = (x: number, y: number, size: number, alpha: number) => {
+      const t = Math.random();
+      let rgb = '255,255,255';
+      if (t < 0.15) rgb = '255,235,196';
+      else if (t < 0.35) rgb = '198,220,255';
+      ctx.fillStyle = `rgba(${rgb},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    for (let i = 0; i < 5200; i++) {
+      const x = Math.random() * width;
+      const y = Math.random() * height;
+      const size = Math.random() < 0.95 ? 0.2 + Math.random() * 1.1 : 1.1 + Math.random() * 1.8;
+      const alpha = Math.random() < 0.2 ? 0.85 + Math.random() * 0.15 : 0.35 + Math.random() * 0.35;
+      drawStar(x, y, size, alpha);
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.minFilter = LinearFilter;
+    texture.magFilter = LinearFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      skyDomeTexture?.dispose();
+    };
+  }, [skyDomeTexture]);
 
   const backgroundStars = useMemo(() => {
     const makeShellStars = (
@@ -115,6 +174,14 @@ export const SpaceScene = ({
   const starsRef = useRef<any[]>([]);
 
   useEffect(() => {
+    const perspective = camera as PerspectiveCamera;
+    if (perspective.far !== CAMERA_FAR_DISTANCE) {
+      perspective.far = CAMERA_FAR_DISTANCE;
+      perspective.updateProjectionMatrix();
+    }
+  }, [camera]);
+
+  useEffect(() => {
     const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
     fetch(starsUrl)
         .then(res => res.json())
@@ -135,12 +202,12 @@ export const SpaceScene = ({
         shipRef.current.position.copy(controller.position);
         shipRef.current.quaternion.copy(controller.quaternion);
     }
+    tpsCamera.update(camera as PerspectiveCamera, controller);
     if (backgroundStarRef.current) {
         backgroundStarRef.current.position.copy(camera.position);
+        backgroundStarRef.current.rotation.y += delta * 0.003;
+        backgroundStarRef.current.rotation.x += delta * 0.0008;
     }
-    camera.far = CAMERA_FAR_DISTANCE;
-    camera.updateProjectionMatrix();
-    tpsCamera.update(camera as PerspectiveCamera, controller);
 
     telemetryAccumRef.current += delta;
     if (telemetryAccumRef.current >= 0.1) {
@@ -330,6 +397,21 @@ export const SpaceScene = ({
       </group>
 
       <group ref={backgroundStarRef} frustumCulled={false}>
+        {skyDomeTexture && (
+          <mesh renderOrder={-30}>
+            <sphereGeometry args={[CAMERA_FAR_DISTANCE * 0.9, 48, 36]} />
+            <meshBasicMaterial
+              map={skyDomeTexture}
+              side={BackSide}
+              toneMapped={false}
+              transparent
+              opacity={0.96}
+              depthWrite={false}
+              depthTest={false}
+            />
+          </mesh>
+        )}
+
         <points>
           <bufferGeometry>
             <bufferAttribute
@@ -345,8 +427,10 @@ export const SpaceScene = ({
             size={2.2}
             sizeAttenuation={false}
             vertexColors
+            toneMapped={false}
             transparent
             depthWrite={false}
+            depthTest={false}
             blending={AdditiveBlending}
             opacity={0.92}
           />
@@ -367,8 +451,10 @@ export const SpaceScene = ({
             size={3.0}
             sizeAttenuation={false}
             vertexColors
+            toneMapped={false}
             transparent
             depthWrite={false}
+            depthTest={false}
             blending={AdditiveBlending}
             opacity={0.92}
           />
