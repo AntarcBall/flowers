@@ -58,7 +58,7 @@ export const Flower = ({
             {shape && (
                 <mesh>
                     <shapeGeometry args={[shape]} />
-                    <meshBasicMaterial color={color} transparent opacity={0.28} side={DoubleSide} />
+                    <meshBasicMaterial color={color} side={DoubleSide} />
                 </mesh>
             )}
             
