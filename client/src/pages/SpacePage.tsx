@@ -11,6 +11,10 @@ import '../App.css';
 export default function SpacePage() {
   const [debugMode, setDebugMode] = useState(false);
   const [aimedStarData, setAimedStarData] = useState<StarSelectionData | null>(null);
+  const [telemetry, setTelemetry] = useState({
+    speed: 0,
+    position: { x: 0, y: 0, z: 0 },
+  });
 
   const handleSelectStar = (data: StarSelectionData) => {
     sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
@@ -24,6 +28,7 @@ export default function SpacePage() {
           onSelectStar={handleSelectStar}
           debugMode={debugMode}
           onAimChange={setAimedStarData}
+          onTelemetryChange={setTelemetry}
         />
       </Canvas>
 
@@ -68,6 +73,25 @@ export default function SpacePage() {
               </div>
             </div>
           )}
+
+          <div
+            style={{
+              ...(CONFIG.PREVIEW as CSSProperties),
+              width: 220,
+              height: 150,
+              color: 'white',
+              padding: '8px 10px',
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Current Position</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}>
+              <div>X: {telemetry.position.x.toFixed(2)}</div>
+              <div>Y: {telemetry.position.y.toFixed(2)}</div>
+              <div>Z: {telemetry.position.z.toFixed(2)}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
