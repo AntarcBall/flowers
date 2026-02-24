@@ -14,6 +14,10 @@ const LABEL_TRIES_PER_RING = 26;
 const LABEL_RING_FACTORS = [1.03, 1.08, 1.15, 1.24, 1.34];
 const LABEL_TEXT_PADDING = 4;
 const LABEL_ORBIT_SCALE = 0.6;
+const FLOWER_SPAWN_MARGIN = 20;
+const FLOWER_MIN_SEPARATION = 100;
+const FLOWER_TRIES_PER_RING = 22;
+const FLOWER_RING_FACTORS = [1.0, 1.2, 1.4, 1.75, 2.1];
 
 export class GardenManager {
   flowers: FlowerData[] = [];
@@ -54,6 +58,57 @@ export class GardenManager {
       y >= radius + LABEL_EDGE_GUARD &&
       y <= CONFIG.GARDEN_SIZE - radius - LABEL_EDGE_GUARD
     );
+  }
+
+  private canPlaceFlower(centerX: number, centerY: number, placed: FlowerData[]) {
+    const minClearSq = FLOWER_MIN_SEPARATION * FLOWER_MIN_SEPARATION;
+    for (const flower of placed) {
+      if (this.distanceSq(centerX, centerY, flower.x, flower.y) < minClearSq) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private resolveFlowerPlacement(x: number, y: number, placed: FlowerData[]) {
+    if (placed.length === 0) {
+      return { x, y };
+    }
+
+    const startAngle = this.toLabelPlacementSeed(x, y);
+
+    for (const ringFactor of FLOWER_RING_FACTORS) {
+      const radius = FLOWER_VISUAL_RADIUS * ringFactor;
+      for (let i = 0; i < FLOWER_TRIES_PER_RING; i += 1) {
+        const angle = startAngle + (i / FLOWER_TRIES_PER_RING) * Math.PI * 2;
+        const candidateX = this.clamp(
+          x + Math.cos(angle) * radius,
+          LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN,
+          CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN,
+        );
+        const candidateY = this.clamp(
+          y + Math.sin(angle) * radius,
+          LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN,
+          CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN,
+        );
+
+        if (!this.isInsideGarden(candidateX, candidateY, FLOWER_VISUAL_RADIUS)) {
+          continue;
+        }
+
+        if (!this.canPlaceFlower(candidateX, candidateY, placed)) {
+          continue;
+        }
+
+        return { x: candidateX, y: candidateY };
+      }
+    }
+
+    return {
+      x: this.clamp(x, LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN, CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN),
+      y: this.clamp(y, LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN, CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN),
+    };
   }
 
   private toLabelPlacementSeed(x: number, y: number) {
@@ -195,15 +250,17 @@ export class GardenManager {
     if (!this.selectedStarData) return null;
 
     const now = Date.now();
+    const resolved = this.resolveFlowerPlacement(x, y, this.flowers);
     const normalizedParams = normalizeFlowerParams(this.selectedStarData.params);
     const word = this.selectedStarData.word || 'Unknown Bloom';
     const labelRadius = this.estimateLabelRadius(word);
-    const { offsetX, offsetY } = this.resolveLabelPlacement(x, y, labelRadius, this.flowers);
+    const { x: resolvedX, y: resolvedY } = resolved;
+    const { offsetX, offsetY } = this.resolveLabelPlacement(resolvedX, resolvedY, labelRadius, this.flowers);
 
     const newFlower: FlowerData = {
       id: uuidv4(),
-      x,
-      y,
+      x: resolvedX,
+      y: resolvedY,
       color: this.selectedStarData.color,
       params: normalizedParams,
       word,
