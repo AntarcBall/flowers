@@ -18,15 +18,68 @@ function lerp(a: number, b: number, t: number) {
 }
 
 const COLOR_LUMINANCE = {
-  min: 34,
-  max: 88,
-  floor: 34,
+  min: 0.16,
+  max: 0.84,
 };
 
 const COLOR_SATURATION = {
   min: 44,
   max: 92,
 };
+
+function hslToRgbLinear(hue: number, saturation: number, lightness: number) {
+  const h = hue / 360;
+  const s = clamp01(saturation);
+  const l = clamp01(lightness);
+
+  const hueToChannel = (t: number) => {
+    const tMod = (t % 1 + 1) % 1;
+    if (2 * tMod < 1) return l + (s * (1 - Math.abs(2 * l - 1)) * (tMod - 1 / 6) * 6);
+    if (tMod < 0.5) return l - (s * (1 - Math.abs(2 * l - 1)) / 2);
+    if (3 * tMod < 2) return l + (s * (1 - Math.abs(2 * l - 1)) * (2 / 3 - tMod) * 6);
+    return l - (s * (1 - Math.abs(2 * l - 1)) / 2);
+  };
+
+  return {
+    r: hueToChannel(h + 1 / 3),
+    g: hueToChannel(h),
+    b: hueToChannel(h - 1 / 3),
+  };
+}
+
+function linearLuminance(rgb: { r: number; g: number; b: number }) {
+  return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+}
+
+function hexFromLinearRgb(rgb: { r: number; g: number; b: number }) {
+  const toHex = (value: number) => {
+    const n = Math.round(clamp01(value) * 255)
+      .toString(16)
+      .padStart(2, '0');
+    return n;
+  };
+  return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`;
+}
+
+function matchLuminance(hue: number, saturation: number, target: number) {
+  let low = 0;
+  let high = 1;
+
+  for (let i = 0; i < 16; i += 1) {
+    const mid = (low + high) / 2;
+    const midRgb = hslToRgbLinear(hue, saturation, mid);
+    const midY = linearLuminance(midRgb);
+
+    if (midY < target) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  const finalY = hslToRgbLinear(hue, saturation, (low + high) / 2);
+  return hexFromLinearRgb(finalY);
+}
 
 export class SemanticMapper {
   static mapCoordinatesToParams(x: number, y: number, z: number) {
@@ -91,15 +144,11 @@ export class SemanticMapper {
     const visibilityGate = clamp01(
       0.34 * satSeed + 0.22 * glowSeed + 0.16 * lumSeed + 0.14 * ringContrastSeed + 0.14 * depthEchoSeed
     );
-    const satBase = lerp(COLOR_SATURATION.min, COLOR_SATURATION.max, visibilityGate);
-    const satShift = 2 * Math.sin((hueSeedA + hueSeedB) * Math.PI);
-    const sat = Math.round(
-      Math.max(COLOR_SATURATION.min, Math.min(COLOR_SATURATION.max, satBase + satShift)),
-    );
-    const lum = Math.round(
-      lerp(COLOR_LUMINANCE.min, COLOR_LUMINANCE.max, visibilityGate)
+    const saturation = clamp01(
+      lerp(COLOR_SATURATION.min, COLOR_SATURATION.max, visibilityGate) / 100
     );
 
-    return `hsl(${hue}, ${sat}%, ${Math.max(COLOR_LUMINANCE.floor, Math.min(COLOR_LUMINANCE.max, lum))}%)`;
+    const targetLuminance = lerp(COLOR_LUMINANCE.min, COLOR_LUMINANCE.max, visibilityGate);
+    return matchLuminance(hue, saturation, targetLuminance);
   }
 }
