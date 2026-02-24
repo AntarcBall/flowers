@@ -6,6 +6,7 @@ import { useInput } from '../hooks/useInput';
 import { OrthographicCamera as ThreeOrthographicCamera } from 'three';
 import { CONFIG } from '../config';
 import { Flower } from './Flower';
+import { PersistenceService } from '../modules/PersistenceService';
 
 export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => {
     const manager = useMemo(() => new GardenManager(), []);
@@ -17,6 +18,25 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => 
         manager.init();
         manager.selectedStarData = selectedStarData;
         setFlowers([...manager.flowers]);
+
+        const handleStorageChange = (event: StorageEvent) => {
+            if (event.key && event.key !== CONFIG.STORAGE_KEY) return;
+            manager.init();
+            setFlowers([...manager.flowers]);
+        };
+
+        const handleCustomStorageUpdate = () => {
+            manager.init();
+            setFlowers([...manager.flowers]);
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener(PersistenceService.STORAGE_UPDATED_EVENT, handleCustomStorageUpdate);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener(PersistenceService.STORAGE_UPDATED_EVENT, handleCustomStorageUpdate);
+        };
     }, [manager, selectedStarData]);
 
     useFrame(() => {

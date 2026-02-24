@@ -10,6 +10,8 @@ export interface FlowerData {
 }
 
 export class PersistenceService {
+  static readonly STORAGE_UPDATED_EVENT = 'flower:storage-updated';
+
   static load(): FlowerData[] {
     try {
       const data = localStorage.getItem(CONFIG.STORAGE_KEY);
@@ -24,6 +26,9 @@ export class PersistenceService {
     try {
       const json = JSON.stringify(flowers);
       localStorage.setItem(CONFIG.STORAGE_KEY, json);
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event(PersistenceService.STORAGE_UPDATED_EVENT));
+      }
     } catch (e) {
       console.error('Failed to save garden', e);
     }
