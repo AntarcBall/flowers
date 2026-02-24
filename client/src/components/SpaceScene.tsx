@@ -20,6 +20,11 @@ type LaunchEffect = {
   start: Vector3;
   elapsed: number;
   duration: number;
+  selectedStarData: {
+    color: string;
+    params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+    word: string;
+  };
 };
 
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -200,7 +205,7 @@ export const SpaceScene = ({
           if (!star) return;
 
           const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-          onSelectStar({ color: star.color, params, word: star.word });
+          const selectedStarData = { color: star.color, params, word: star.word };
           setLaunchEffects((prev) => [
               ...prev.slice(-6),
               {
@@ -208,7 +213,8 @@ export const SpaceScene = ({
                   start: new Vector3().copy(controller.position),
                   target: new Vector3().copy(star.position),
                   elapsed: 0,
-                  duration: 1.45
+                  duration: 1.45,
+                  selectedStarData,
               }
           ]);
       };
@@ -229,15 +235,22 @@ export const SpaceScene = ({
   useFrame((_, delta) => {
     if (launchEffects.length === 0) return;
 
+    const landed: typeof launchEffects = [];
+
     setLaunchEffects((currentEffects) =>
       currentEffects
         .map((effect) => {
           const nextElapsed = effect.elapsed + delta;
-          if (nextElapsed >= effect.duration) return null;
+          if (nextElapsed >= effect.duration) {
+            landed.push(effect);
+            return null;
+          }
           return { ...effect, elapsed: nextElapsed };
         })
         .filter((effect): effect is LaunchEffect => effect !== null)
     );
+
+    landed.forEach((effect) => onSelectStar(effect.selectedStarData));
   });
 
   const getLaunchPosition = (effect: LaunchEffect): Vector3 => {
