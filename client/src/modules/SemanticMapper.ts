@@ -5,10 +5,6 @@ function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
-function fract(value: number) {
-  return value - Math.floor(value);
-}
-
 function toSeed(key: keyof FlowerRenderParams, x: number, y: number, z: number) {
   const seed = CONFIG.SEEDS[key as keyof typeof CONFIG.SEEDS];
   const signal = Math.sin(seed.freq[0] * x + seed.phase[0]) +
@@ -30,6 +26,35 @@ const COLOR_SATURATION = {
   min: 44,
   max: 92,
 };
+
+const COLOR_SPACE_SMOOTHING = {
+  radius: 0.008,
+  centerWeight: 0.44,
+  axisWeight: 0.0933333333,
+};
+
+function wrap01(value: number) {
+  return (value % 1 + 1) % 1;
+}
+
+function smoothSeed(
+  key: keyof FlowerRenderParams,
+  x: number,
+  y: number,
+  z: number,
+  radius = COLOR_SPACE_SMOOTHING.radius,
+) {
+  const center = toSeed(key, x, y, z) * COLOR_SPACE_SMOOTHING.centerWeight;
+  const axisOffset = COLOR_SPACE_SMOOTHING.axisWeight;
+
+  return center +
+    axisOffset * toSeed(key, x + radius, y, z) +
+    axisOffset * toSeed(key, x - radius, y, z) +
+    axisOffset * toSeed(key, x, y + radius, z) +
+    axisOffset * toSeed(key, x, y - radius, z) +
+    axisOffset * toSeed(key, x, y, z + radius) +
+    axisOffset * toSeed(key, x, y, z - radius);
+}
 
 function hslToRgbLinear(hue: number, saturation: number, lightness: number) {
   const h = hue / 360;
@@ -135,35 +160,40 @@ export class SemanticMapper {
     const normalizedX = clamp01((x / L + 1) / 2);
     const normalizedY = clamp01((y / L + 1) / 2);
     const normalizedZ = clamp01((z / L + 1) / 2);
+    const posPhase = (normalizedX + normalizedY * 0.61 + normalizedZ * 0.29) / 2.9;
 
-    const hueSeedA = toSeed('m', normalizedX, normalizedY, normalizedZ);
-    const hueSeedB = toSeed('radialTwist', normalizedY, normalizedZ, normalizedX);
-    const satSeed = toSeed('petalCrest', normalizedZ, normalizedX, normalizedY);
-    const lumSeed = toSeed('coreGlow', normalizedX, normalizedY, normalizedZ);
-    const glowSeed = toSeed('fractalIntensity', normalizedY, normalizedX, normalizedZ);
-    const ringContrastSeed = toSeed('ringContrast', normalizedY, normalizedZ, normalizedX);
-    const depthEchoSeed = toSeed('depthEcho', normalizedX, normalizedY, normalizedZ);
-    const symmetrySeed = toSeed('symmetry', normalizedY, normalizedX, normalizedZ);
-    const ringBandsSeed = toSeed('ringBands', normalizedZ, normalizedY, normalizedX);
-    const petalCountSeed = toSeed('petalCount', normalizedZ, normalizedX, normalizedY);
-    const radialTwistSeed = toSeed('radialTwist', normalizedX, normalizedZ, normalizedY);
+    const hueSeedA = smoothSeed('m', normalizedX, normalizedY, normalizedZ);
+    const hueSeedB = smoothSeed('radialTwist', normalizedY, normalizedZ, normalizedX);
+    const satSeed = smoothSeed('petalCrest', normalizedZ, normalizedX, normalizedY);
+    const lumSeed = smoothSeed('coreGlow', normalizedX, normalizedY, normalizedZ);
+    const glowSeed = smoothSeed('fractalIntensity', normalizedY, normalizedX, normalizedZ);
+    const ringContrastSeed = smoothSeed('ringContrast', normalizedY, normalizedZ, normalizedX);
+    const depthEchoSeed = smoothSeed('depthEcho', normalizedX, normalizedY, normalizedZ);
+    const symmetrySeed = smoothSeed('symmetry', normalizedY, normalizedX, normalizedZ);
+    const ringBandsSeed = smoothSeed('ringBands', normalizedZ, normalizedY, normalizedX);
+    const petalCountSeed = smoothSeed('petalCount', normalizedZ, normalizedX, normalizedY);
+    const radialTwistSeed = smoothSeed('radialTwist', normalizedX, normalizedZ, normalizedY);
+    const spreadSeed = smoothSeed('petalSpread', normalizedX, normalizedZ, normalizedY);
 
-    const hueIndex = fract(
-      2.31 * hueSeedA +
-      3.17 * hueSeedB +
-      5.37 * lumSeed +
-      6.11 * glowSeed +
-      7.13 * ringContrastSeed +
-      11.01 * depthEchoSeed +
-      13.07 * symmetrySeed +
-      17.19 * ringBandsSeed +
-      19.23 * petalCountSeed +
-      23.29 * radialTwistSeed +
-      29.31 * normalizedX +
-      31.17 * normalizedY +
-      37.19 * normalizedZ
-    );
-    const hue = Math.round(hueIndex * 360);
+    const hueWave =
+      0.22 * hueSeedA +
+      0.16 * hueSeedB +
+      0.14 * lumSeed +
+      0.10 * glowSeed +
+      0.09 * ringContrastSeed +
+      0.08 * depthEchoSeed +
+      0.08 * spreadSeed +
+      0.06 * symmetrySeed +
+      0.06 * ringBandsSeed +
+      0.04 * petalCountSeed +
+      0.04 * radialTwistSeed;
+
+    const huePhase = Math.sin(hueSeedA * Math.PI * 2 + 0.24 * hueWave * Math.PI * 2)
+      * 0.04
+      + Math.cos(posPhase * Math.PI * 2 + hueSeedB * Math.PI * 2) * 0.04;
+
+    const hueMix = hueWave + huePhase;
+    const hue = wrap01(hueMix) * 360;
     const visibilityGate = clamp01(
       0.34 * satSeed + 0.22 * glowSeed + 0.16 * lumSeed + 0.14 * ringContrastSeed + 0.14 * depthEchoSeed
     );
