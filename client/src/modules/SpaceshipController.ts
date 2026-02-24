@@ -34,7 +34,8 @@ export class SpaceshipController {
     const pitchQuaternion = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), this.angularVelocity.pitch);
     const yawQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), this.angularVelocity.yaw);
 
-    this.quaternion.multiply(pitchQuaternion).multiply(yawQuaternion);
+    this.quaternion.premultiply(yawQuaternion);
+    this.quaternion.multiply(pitchQuaternion);
 
     const forwardVector = new Vector3(0, 0, 1).applyQuaternion(this.quaternion);
     this.position.addScaledVector(forwardVector, this.speed * deltaTime);
