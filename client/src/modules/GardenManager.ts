@@ -7,12 +7,12 @@ import { normalizeFlowerParams } from './FlowerShape';
 import { v4 as uuidv4 } from 'uuid';
 
 const FLOWER_VISUAL_RADIUS = 104;
-const FLOWER_LABEL_GROWTH_MARGIN = 18;
+const FLOWER_LABEL_GROWTH_MARGIN = 4;
 const LABEL_EDGE_GUARD = 10;
-const LABEL_FLAT_GAP = 26;
+const LABEL_FLAT_GAP = 8;
 const LABEL_TRIES_PER_RING = 26;
-const LABEL_RING_FACTORS = [1.13, 1.22, 1.35, 1.5, 1.72];
-const LABEL_TEXT_PADDING = 8;
+const LABEL_RING_FACTORS = [1.03, 1.08, 1.15, 1.24, 1.34];
+const LABEL_TEXT_PADDING = 4;
 
 export class GardenManager {
   flowers: FlowerData[] = [];
