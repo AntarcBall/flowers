@@ -15,7 +15,7 @@ export const CONFIG = {
   },
   
   CUBE_SIZE: 1000,
-  get MAX_SPEED() { return this.CUBE_SIZE / 2; }, 
+  MAX_SPEED: 25, 
   ACCEL_SPEED: 0.05,
   ACCEL_ROT: 0.0002,
   DAMPING_ROT: 0.98,
