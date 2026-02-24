@@ -51,8 +51,9 @@ export const SpaceScene = ({
 
   const BACKGROUND_CELESTIAL_STAR_COUNT = 1800;
   const BACKGROUND_GRAIN_STAR_COUNT = 600;
-  const BACKGROUND_STAR_RADIUS_MIN = 1500;
-  const BACKGROUND_STAR_RADIUS_MAX = 2400;
+  const BACKGROUND_STAR_RADIUS_MIN = 900;
+  const BACKGROUND_STAR_RADIUS_MAX = 2200;
+  const CAMERA_FAR_DISTANCE = 5000;
 
   const backgroundStars = useMemo(() => {
     const makeShellStars = (
@@ -137,6 +138,8 @@ export const SpaceScene = ({
     if (backgroundStarRef.current) {
         backgroundStarRef.current.position.copy(camera.position);
     }
+    camera.far = CAMERA_FAR_DISTANCE;
+    camera.updateProjectionMatrix();
     tpsCamera.update(camera as PerspectiveCamera, controller);
 
     telemetryAccumRef.current += delta;
@@ -336,13 +339,13 @@ export const SpaceScene = ({
             />
           </bufferGeometry>
           <pointsMaterial
-            size={1.7}
-            sizeAttenuation
+            size={2.2}
+            sizeAttenuation={false}
             vertexColors
             transparent
             depthWrite={false}
             blending={AdditiveBlending}
-            opacity={0.75}
+            opacity={0.92}
           />
         </points>
 
@@ -358,8 +361,8 @@ export const SpaceScene = ({
             />
           </bufferGeometry>
           <pointsMaterial
-            size={2.8}
-            sizeAttenuation
+            size={3.0}
+            sizeAttenuation={false}
             vertexColors
             transparent
             depthWrite={false}
