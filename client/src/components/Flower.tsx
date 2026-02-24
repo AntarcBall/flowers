@@ -55,10 +55,10 @@ const FlowerCore = ({
           />
           <meshPhysicalMaterial
             color={profile.palette.outer}
-            roughness={0.48}
-            metalness={0.12}
+            roughness={0.3}
+            metalness={0.28}
             emissive={profile.palette.outerGlow}
-            emissiveIntensity={0.15 + resolvedParams.coreGlow * 0.4}
+            emissiveIntensity={0.28 + resolvedParams.coreGlow * 0.42}
             clearcoat={0.4}
             clearcoatRoughness={0.5}
             side={DoubleSide}
@@ -79,11 +79,33 @@ const FlowerCore = ({
           />
           <meshStandardMaterial
             color={profile.palette.inner}
-            roughness={0.52}
-            metalness={0.02}
+            roughness={0.62}
+            metalness={0.05}
             emissive={profile.palette.innerGlow}
             emissiveIntensity={0.08 + resolvedParams.coreGlow * 0.25}
             side={DoubleSide}
+          />
+        </mesh>
+
+        <mesh position={[0, 0, 0.44 * normalizedGrowth]}>
+          <extrudeGeometry
+            args={[
+              profile.innerShape,
+              {
+                depth: CONFIG.FLOWER_SHAPE.innerExtrudeDepth * 0.55 * normalizedGrowth,
+                bevelEnabled: false,
+              },
+            ]}
+          />
+          <meshStandardMaterial
+            color={profile.palette.line}
+            roughness={0.42}
+            metalness={0.18}
+            emissive={profile.palette.innerGlow}
+            emissiveIntensity={0.16 + resolvedParams.coreGlow * 0.32}
+            side={DoubleSide}
+            transparent
+            opacity={0.45}
           />
         </mesh>
 

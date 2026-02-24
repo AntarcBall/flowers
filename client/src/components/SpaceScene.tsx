@@ -38,13 +38,16 @@ const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 
-const BACKGROUND_STAR_COUNT = 2400;
+const BACKGROUND_STAR_COUNT = 1700;
 const BACKGROUND_STAR_RADIUS_MIN = 900;
 const BACKGROUND_STAR_RADIUS_MAX = 1800;
-const MAX_VISIBLE_LABELS = 12;
+const MAX_VISIBLE_LABELS = 8;
+const STAR_MESH_RADIUS = 0.95;
+const STAR_LABEL_UPDATE_BUDGET = 0.06;
 const LABEL_CONE_ANGLE = CONFIG.CONE_ANGLE_THRESHOLD * 1.2;
 const LABEL_CONE_COS = Math.cos(LABEL_CONE_ANGLE);
 const TARGET_CONE_COS = Math.cos(CONFIG.CONE_ANGLE_THRESHOLD);
+const LABEL_COS = LABEL_CONE_COS;
 const LABEL_CONE_LENGTH = 50 * 14;
 const CONE_HEIGHT = 50 * 14;
 const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
@@ -102,6 +105,7 @@ export const SpaceScene = ({
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
   const aimedStarRef = useRef<number | null>(null);
   const telemetryAccumRef = useRef(0);
+  const labelUpdateAccumRef = useRef(0);
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
   const labelVisibleKeyRef = useRef('');
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
@@ -141,14 +145,6 @@ export const SpaceScene = ({
 
     return { positions, colors };
   }, []);
-
-  const getLabelFontSize = (distance: number) => {
-    const c = CONFIG.TEXT_MIN_FONT_SIZE;
-    const d1 = CONFIG.TEXT_SIZE_BREAKPOINT;
-    const a = CONFIG.TEXT_LINEAR_FONT_SLOPE;
-    const raw = distance < d1 ? c : a * distance;
-    return Math.min(CONFIG.TEXT_MAX_FONT_SIZE, Math.max(c, raw));
-  };
 
   useEffect(() => {
     const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
@@ -214,16 +210,22 @@ export const SpaceScene = ({
         bestTargetId = star.id;
       }
 
-      if (dist <= LABEL_CONE_LENGTH && dot > LABEL_CONE_COS) {
+      if (dist <= LABEL_CONE_LENGTH && dot > LABEL_COS) {
         insertCandidate(candidates, { id: star.id, dot, dist }, MAX_VISIBLE_LABELS);
       }
     }
 
     const visibleIds = candidates.map((candidate) => candidate.id);
     const visibleKey = visibleIds.join(',');
-    if (visibleKey !== labelVisibleKeyRef.current) {
-      setLabelVisibleStarIds(new Set(visibleIds));
-      labelVisibleKeyRef.current = visibleKey;
+
+    if (labelUpdateAccumRef.current >= STAR_LABEL_UPDATE_BUDGET) {
+      if (visibleKey !== labelVisibleKeyRef.current) {
+        setLabelVisibleStarIds(new Set(visibleIds));
+        labelVisibleKeyRef.current = visibleKey;
+      }
+      labelUpdateAccumRef.current = 0;
+    } else {
+      labelUpdateAccumRef.current += delta;
     }
 
     if (bestTargetId !== aimedStarRef.current) {
@@ -309,13 +311,12 @@ export const SpaceScene = ({
     return stars.map((star) => {
       const isAimed = star.id === aimedStarId;
       const showText = labelVisibleStarIds.has(star.id) || isAimed;
-      const distanceToCamera = camera.position.distanceTo(star.position);
-      const labelFontSize = Math.round(getLabelFontSize(distanceToCamera));
+      const labelFontSize = 14;
 
       return (
         <group key={star.id} position={star.position}>
           <mesh>
-            <sphereGeometry args={[1, 8, 8]} />
+            <sphereGeometry args={[STAR_MESH_RADIUS, 8, 8]} />
             <meshBasicMaterial color={star.color} />
           </mesh>
 
@@ -336,7 +337,7 @@ export const SpaceScene = ({
         </group>
       );
     });
-  }, [aimedStarId, labelVisibleStarIds, stars, camera.position.x, camera.position.y, camera.position.z]);
+  }, [aimedStarId, labelVisibleStarIds, stars]);
 
   return (
     <>

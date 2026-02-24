@@ -71,7 +71,14 @@ export default function SpacePage() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
-      <Canvas>
+      <Canvas
+        dpr={[1, 1.5]}
+        gl={{
+          antialias: false,
+          powerPreference: 'high-performance',
+          alpha: false,
+        }}
+      >
         <SpaceScene
           onSelectStar={handleSelectStar}
           debugMode={debugMode}

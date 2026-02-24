@@ -58,14 +58,17 @@ export const FlowerPreview = ({
     const pointsOuter = profile.outerPoints.map((point) => ({ x: point.x * scale, y: point.y * scale }));
     const pointsInner = profile.innerPoints.map((point) => ({ x: point.x * scale * 0.78, y: point.y * scale * 0.78 }));
 
+    ctx.globalCompositeOperation = 'lighter';
     ctx.shadowBlur = 12;
     ctx.shadowColor = profile.palette.outerGlow;
 
-    drawShape(ctx, pointsOuter, profile.palette.outerGlow, 0.28, 4.2, true);
-    drawShape(ctx, pointsOuter, profile.palette.line, 1, 1.6, false);
+    drawShape(ctx, pointsOuter, profile.palette.outer, 0.45, 4.2, true);
+    drawShape(ctx, pointsOuter, profile.palette.outerGlow, 0.72, 1.8, false);
+    drawShape(ctx, pointsOuter, profile.palette.line, 0.9, 0.9, false);
 
-    drawShape(ctx, pointsInner, profile.palette.inner, 0.75, 2.1, true);
-    drawShape(ctx, pointsInner, profile.palette.innerGlow, 0.5, 0.8, false);
+    drawShape(ctx, pointsInner, profile.palette.inner, 0.7, 2.8, true);
+    drawShape(ctx, pointsInner, profile.palette.innerGlow, 0.5, 1.2, false);
+    drawShape(ctx, pointsInner, profile.palette.line, 0.35, 1.0, false);
 
     for (let i = 0; i < profile.outerPoints.length; i += 1) {
       const p = profile.outerPoints[i];
@@ -75,7 +78,7 @@ export const FlowerPreview = ({
       const t = (Math.sin(phi * 6 + size * 0.01) + 1) / 2;
       if (t > 0.74) {
         ctx.beginPath();
-        ctx.fillStyle = profile.palette.inner;
+        ctx.fillStyle = i % 2 === 0 ? profile.palette.inner : profile.palette.innerGlow;
         ctx.globalAlpha = 0.35 + t * 0.2;
         ctx.arc(
           p.x * scale + cx * (scale / 100),
@@ -105,6 +108,7 @@ export const FlowerPreview = ({
     ctx.fill();
 
     ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }, [params, color, size]);
 

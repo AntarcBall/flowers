@@ -63,6 +63,10 @@ function hashColor(base: string, shiftH: number, multS = 1, multL = 1) {
   return `#${out.getHexString()}`;
 }
 
+function hashOffset(base: string, angleShift: number, satBoost = 1, lumBoost = 1) {
+  return hashColor(base, angleShift, satBoost, lumBoost);
+}
+
 function superR(phi: number, m: number, n1: number, n2: number, n3: number, a = 1, b = 1) {
   const t1 = Math.pow(Math.abs(Math.cos((m * phi) / 4) / a), n2);
   const t2 = Math.pow(Math.abs(Math.sin((m * phi) / 4) / b), n3);
@@ -228,14 +232,14 @@ export function buildFlowerProfile(params: FlowerRenderParams, color: string): F
   const innerShape = makeShapeFromPoints(innerPoints);
 
   const palette: FlowerPalette = {
-    outer: hashColor(color, -0.03, 0.95, 1.15),
-    outerGlow: hashColor(color, 0.0, 1.05, 1.3),
-    inner: hashColor(color, 0.08, 0.9, 0.82),
-    innerGlow: hashColor(color, 0.18, 1.1, 1.05),
-    core: hashColor(color, -0.12, 1.05, 0.92),
-    coreGlow: hashColor(color, -0.06, 1.4, 1.35),
-    edge: hashColor(color, -0.03, 1.2, 1.05),
-    line: hashColor(color, 0.0, 1.15, 0.95),
+    outer: hashOffset(color, -0.07, 1.18, 1.16),
+    outerGlow: hashOffset(color, 0.03, 1.08, 1.28),
+    inner: hashOffset(color, 0.12, 0.96, 0.78),
+    innerGlow: hashOffset(color, 0.24, 1.2, 1.06),
+    core: hashOffset(color, -0.14, 1.12, 0.9),
+    coreGlow: hashOffset(color, -0.03, 1.45, 1.35),
+    edge: hashOffset(color, -0.02, 1.12, 0.94),
+    line: hashOffset(color, 0.2, 1.22, 0.85),
   };
 
   const core = clamp(
