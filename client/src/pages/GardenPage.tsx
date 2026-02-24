@@ -4,7 +4,7 @@ import { FlowerPreview } from '../components/FlowerPreview';
 import { GardenScene } from '../components/GardenScene';
 import { SELECTED_STAR_SESSION_KEY } from '../types';
 import type { StarSelectionData } from '../types';
-import '../App.css';
+import { CONFIG } from '../config';
 
 const FALLBACK_STAR: StarSelectionData = {
   word: 'No selected word',
@@ -18,12 +18,13 @@ export default function GardenPage() {
   useEffect(() => {
     const raw = sessionStorage.getItem(SELECTED_STAR_SESSION_KEY);
     if (!raw) return;
-
     try {
-      const parsed = JSON.parse(raw);
-      setSelectedStarData(parsed as StarSelectionData);
+      const parsed = JSON.parse(raw) as StarSelectionData;
+      if (parsed && typeof parsed === 'object' && parsed.params) {
+        setSelectedStarData(parsed);
+      }
     } catch {
-      // keep fallback
+      return;
     }
   }, []);
 
@@ -42,8 +43,6 @@ export default function GardenPage() {
     window.location.href = '/';
   };
 
-  const preview = useMemo(() => selectedStarData, [selectedStarData]);
-
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
       <Canvas
@@ -54,106 +53,152 @@ export default function GardenPage() {
           alpha: false,
         }}
       >
-        <GardenScene selectedStarData={preview} />
+        <GardenScene selectedStarData={selectedStarData} />
       </Canvas>
 
       <div
         style={{
           position: 'absolute',
-          top: 20,
-          left: 20,
-          color: '#f8f8ff',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
           pointerEvents: 'none',
-            fontFamily: 'Georgia, "Times New Roman", serif',
-          zIndex: 2,
-          width: 'calc(100% - 40px)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 16,
         }}
       >
+        <div style={{ position: 'absolute', top: 20, left: 20, color: 'white' }}>
+          <p>Back to Space to choose another star seed.</p>
+          <p>WASD to Scroll. Click ground to plant.</p>
+        </div>
+
         <div
           style={{
+            position: 'absolute',
+            top: 56,
+            left: 20,
+            color: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
             pointerEvents: 'none',
-            background: 'rgba(6, 12, 26, 0.7)',
-            border: '1px solid rgba(255,255,255,0.22)',
-            borderRadius: 12,
-            padding: '10px 12px',
-            backdropFilter: 'blur(5px)',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.45)',
           }}
         >
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Garden Garden</div>
-          <button style={{ pointerEvents: 'auto' }} onClick={backToSpace}>
-            Back to Space
-          </button>
-          <p style={{ margin: '10px 0 4px', fontWeight: 700, fontSize: 18 }}>{preview.word}</p>
-          <p style={{ margin: 0, fontSize: 12, opacity: 0.8 }}>WASD to Scroll. Click ground to plant.</p>
+          {/*
+            Reserved layer to keep overlay DOM parity with the Space scene HUD structure.
+            This empty slot intentionally occupies the second HUD lane for a stable target path.
+          */}
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            width: 170,
+            color: 'white',
+            pointerEvents: 'none',
+          }}
+        >
           <div
             style={{
-              marginTop: 8,
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'wrap',
-              maxWidth: 260,
-              fontSize: 11,
-              opacity: 0.9,
+              width: 150,
+              height: 100,
+              border: '2px solid rgba(255, 255, 255, 0.45)',
+              borderBottom: 'none',
+              borderRadius: '150px 150px 0 0 / 80px 80px 0 0',
+              overflow: 'hidden',
+              background: 'rgba(0, 0, 0, 0.35)',
+              boxShadow: '0 0 20px rgba(0, 0, 0, 0.4)',
             }}
           >
-            {stats.map((item) => (
-              <span
-                key={item}
-                style={{
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  borderRadius: 999,
-                  padding: '3px 8px',
-                  color: '#fff',
-                  background: 'rgba(255,255,255,0.05)',
-                }}
-              >
-                {item}
-              </span>
-            ))}
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 0,
+                width: 2,
+                height: 64,
+                transformOrigin: '50% 100%',
+                background: '#9bd7ff',
+                transform: 'translateX(-50%)',
+              }}
+            />
           </div>
+          <div style={{ marginTop: 4, textAlign: 'center', fontSize: 12, color: '#9bd7ff' }}>Garden Scan</div>
         </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 20,
+            left: 20,
+            right: 20,
+            pointerEvents: 'auto',
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '20px',
+            alignItems: 'flex-end',
+          }}
+        >
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
+            <button onClick={backToSpace}>Back to Space</button>
+
+            <div
+              style={{
+                ...(CONFIG.PREVIEW as any),
+                width: 190,
+                height: 200,
+                color: 'white',
+                padding: '8px 10px',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 4 }}>
+                {selectedStarData.word}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '5px' }}>
+                <FlowerPreview params={selectedStarData.params} color={selectedStarData.color} size={120} />
+              </div>
+            </div>
+          </div>
 
           <div
             style={{
-              marginTop: 'auto',
-              alignSelf: 'flex-end',
-              background: 'rgba(255,255,255,0.9)',
-            borderRadius: 12,
-            padding: 12,
-            color: '#122',
-            minWidth: 150,
-            pointerEvents: 'auto',
-            boxShadow: '0 12px 40px rgba(4, 10, 22, 0.45)',
-          }}
-        >
-          <div
-            style={{
-              position: 'relative',
-              width: 120,
-              height: 120,
-              margin: '0 auto 6px',
-              borderRadius: 12,
-              overflow: 'hidden',
-              border: `1px solid ${preview.color}`,
-              background: `linear-gradient(140deg, ${preview.color}44, rgba(255,255,255,0.2))`,
+              ...(CONFIG.PREVIEW as any),
+              width: 240,
+              height: 190,
+              color: 'white',
+              padding: '8px 10px',
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
             }}
           >
-            <FlowerPreview params={preview.params} color={preview.color} size={120} />
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              textAlign: 'center',
-              fontWeight: 700,
-              color: '#121b31',
-            }}
-          >
-            Preview seed
+            <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Selected Seed Detail</div>
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                gap: 6,
+                flexWrap: 'wrap',
+                fontSize: 11,
+                opacity: 0.95,
+              }}
+            >
+              {stats.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.25)',
+                    borderRadius: 999,
+                    padding: '3px 8px',
+                    color: '#fff',
+                    background: 'rgba(255,255,255,0.05)',
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
