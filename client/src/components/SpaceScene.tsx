@@ -4,7 +4,7 @@ import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
 import { SelectionSystem } from '../modules/SelectionSystem';
 import { useInput } from '../hooks/useInput';
-import { Vector3, Group, PerspectiveCamera } from 'three';
+import { Vector3, Group, PerspectiveCamera, AdditiveBlending } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
 import { CONFIG } from '../config';
@@ -29,7 +29,44 @@ export const SpaceScene = ({
   const tpsCamera = useMemo(() => new TPSCamera(), []);
   const inputRef = useInput();
   const shipRef = useRef<Group>(null);
+  const backgroundStarRef = useRef<any>(null);
   const { camera, gl } = useThree();
+
+  const BACKGROUND_STAR_COUNT = 2400;
+  const BACKGROUND_STAR_RADIUS_MIN = 900;
+  const BACKGROUND_STAR_RADIUS_MAX = 1800;
+
+  const backgroundStars = useMemo(() => {
+    const total = BACKGROUND_STAR_COUNT * 3;
+    const positions = new Float32Array(total);
+    const colors = new Float32Array(total);
+
+    for (let i = 0; i < BACKGROUND_STAR_COUNT; i++) {
+      const i3 = i * 3;
+
+      const u = Math.random() * Math.PI * 2;
+      const v = Math.random() * 2 - 1;
+      const phi = Math.acos(v);
+      const radius =
+        BACKGROUND_STAR_RADIUS_MIN + Math.random() * (BACKGROUND_STAR_RADIUS_MAX - BACKGROUND_STAR_RADIUS_MIN);
+
+      const sinPhi = Math.sin(phi);
+      const x = radius * sinPhi * Math.cos(u);
+      const y = radius * Math.cos(phi);
+      const z = radius * sinPhi * Math.sin(u);
+
+      positions[i3] = x;
+      positions[i3 + 1] = y;
+      positions[i3 + 2] = z;
+
+      const glow = 0.55 + Math.random() * 0.45;
+      colors[i3] = 0.75 + glow * 0.25;
+      colors[i3 + 1] = 0.85 + glow * 0.15;
+      colors[i3 + 2] = 1.0;
+    }
+
+    return { positions, colors, count: BACKGROUND_STAR_COUNT };
+  }, []);
 
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
   const aimedStarRef = useRef<number | null>(null);
@@ -61,6 +98,9 @@ export const SpaceScene = ({
     if (shipRef.current) {
         shipRef.current.position.copy(controller.position);
         shipRef.current.quaternion.copy(controller.quaternion);
+    }
+    if (backgroundStarRef.current) {
+        backgroundStarRef.current.position.copy(camera.position);
     }
     tpsCamera.update(camera as PerspectiveCamera, controller);
 
@@ -196,6 +236,28 @@ export const SpaceScene = ({
           </mesh>
         )}
       </group>
+
+      <points ref={backgroundStarRef} frustumCulled={false}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes.position"
+            args={[backgroundStars.positions, 3]}
+          />
+          <bufferAttribute
+            attach="attributes.color"
+            args={[backgroundStars.colors, 3]}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          size={2.4}
+          sizeAttenuation
+          vertexColors
+          transparent
+          depthWrite={false}
+          blending={AdditiveBlending}
+          opacity={0.9}
+        />
+      </points>
 
       {stars.map((star) => {
           const isAimed = star.id === aimedStarId;
