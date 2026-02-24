@@ -45,7 +45,7 @@ const BACKGROUND_STAR_COUNT = 1700;
 const BACKGROUND_STAR_RADIUS_MIN = 900;
 const BACKGROUND_STAR_RADIUS_MAX = 1800;
 const MAX_VISIBLE_LABELS = 8;
-const STAR_MESH_RADIUS = 0.95;
+const STAR_MESH_RADIUS = 0.95 * 2.4;
 const STAR_LABEL_UPDATE_BUDGET = 0.06;
 const LABEL_CONE_ANGLE = CONFIG.CONE_ANGLE_THRESHOLD * 1.2;
 const LABEL_CONE_COS = Math.cos(LABEL_CONE_ANGLE);
@@ -178,7 +178,7 @@ export const SpaceScene = ({
     if (backgroundStarRef.current) {
       backgroundStarRef.current.position.copy(camera.position);
     }
-    tpsCamera.update(camera as PerspectiveCamera, controller);
+    tpsCamera.update(camera as PerspectiveCamera, controller, delta);
 
     telemetryAccumRef.current += delta;
     if (telemetryAccumRef.current >= 0.1) {
