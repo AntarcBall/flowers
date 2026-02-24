@@ -118,28 +118,31 @@ export default function SpacePage() {
           style={{
             position: 'absolute',
             bottom: 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
+            left: 20,
+            right: 20,
             pointerEvents: 'auto',
             display: 'flex',
+            justifyContent: 'space-between',
             gap: '20px',
-            alignItems: 'end',
+            alignItems: 'flex-end',
           }}
         >
-          <button onClick={() => setDebugMode((prev) => !prev)}>
-            Debug Cone: {debugMode ? 'ON' : 'OFF'}
-          </button>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
+            <button onClick={() => setDebugMode((prev) => !prev)}>
+              Debug Cone: {debugMode ? 'ON' : 'OFF'}
+            </button>
 
-          {aimedStarData && (
-            <div style={CONFIG.PREVIEW as CSSProperties}>
-              <div style={{ padding: '5px', textAlign: 'center', color: 'white', fontSize: '12px' }}>
-                {aimedStarData.word}
+            {aimedStarData && (
+              <div style={CONFIG.PREVIEW as CSSProperties}>
+                <div style={{ padding: '5px', textAlign: 'center', color: 'white', fontSize: '12px' }}>
+                  {aimedStarData.word}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '5px' }}>
+                  <FlowerPreview params={aimedStarData.params} color={aimedStarData.color} size={120} />
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '5px' }}>
-                <FlowerPreview params={aimedStarData.params} color={aimedStarData.color} size={120} />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div
             style={{
