@@ -11,7 +11,11 @@ export class TPSCamera {
 
     const targetPos = spaceship.position.clone().add(offsetVec);
 
-    camera.position.lerp(targetPos, CAMERA_LERP_FACTOR);
+    if (CAMERA_LERP_FACTOR >= 1) {
+      camera.position.copy(targetPos);
+    } else {
+      camera.position.lerp(targetPos, CAMERA_LERP_FACTOR);
+    }
 
     const lookTarget = spaceship.position.clone().add(
       new Vector3(0, 0, CAMERA_LOOK_TARGET_DIST).applyQuaternion(spaceship.quaternion)

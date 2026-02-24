@@ -21,6 +21,11 @@ export default function SpacePage() {
     window.location.href = '/garden.html';
   };
 
+  const speedRatio = Math.max(0, Math.min(1, telemetry.speed / CONFIG.MAX_SPEED));
+  const speedAngle = speedRatio * 180;
+  const speedNeedleDeg = speedAngle - 90;
+  const speedReadoutDeg = 180 - Math.round(speedAngle);
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
       <Canvas>
@@ -45,6 +50,64 @@ export default function SpacePage() {
         <div style={{ position: 'absolute', top: 20, left: 20, color: 'white' }}>
           <p>WASD to Rotate, QE to Speed up/down.</p>
           <p>Aim at a star and Click to select.</p>
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            width: 170,
+            color: 'white',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: 150,
+              height: 80,
+              border: '2px solid rgba(255, 255, 255, 0.6)',
+              borderBottom: 'none',
+              borderRadius: '150px 150px 0 0 / 80px 80px 0 0',
+              overflow: 'hidden',
+              background: 'rgba(0, 0, 0, 0.35)',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 0,
+                width: 2,
+                height: 64,
+                transformOrigin: '50% 100%',
+                background: '#7fffbf',
+                transform: `translateX(-50%) rotate(${speedNeedleDeg}deg)`,
+                transition: 'transform 100ms linear',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: -2,
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: '#7fffbf',
+                transform: 'translateX(-50%)',
+              }}
+            />
+            <div style={{ position: 'absolute', top: 6, left: 10, fontSize: 11, color: '#ddd' }}>180</div>
+            <div style={{ position: 'absolute', top: 6, right: 10, fontSize: 11, color: '#ddd' }}>0</div>
+          </div>
+          <div style={{ marginTop: 4, textAlign: 'center', fontSize: 12, color: '#ddd' }}>
+            Speedometer {speedReadoutDeg}°
+          </div>
+          <div style={{ textAlign: 'center', fontSize: 12, color: '#9bd7ff' }}>
+            {telemetry.speed.toFixed(2)} / {Math.round(CONFIG.MAX_SPEED)}
+          </div>
         </div>
 
         <div
