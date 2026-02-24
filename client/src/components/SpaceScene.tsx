@@ -110,7 +110,6 @@ export const SpaceScene = ({
   const labelVisibleKeyRef = useRef('');
   const MAX_VISIBLE_LABELS = 12;
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
-  const launchCompletionTimersRef = useRef<Map<string, number>>(new Map());
   
   const [stars, setStars] = useState<any[]>([]);
   const starsRef = useRef<any[]>([]);
@@ -210,25 +209,17 @@ export const SpaceScene = ({
 
           const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
           const selectedStarData = { color: star.color, params, word: star.word };
-          const launchId = makeLaunchId();
-          const duration = 1.45;
           setLaunchEffects((prev) => [
               ...prev.slice(-6),
               {
-                  id: launchId,
+                  id: makeLaunchId(),
                   start: new Vector3().copy(controller.position),
                   target: new Vector3().copy(star.position),
                   elapsed: 0,
-                  duration,
+                  duration: 1.45,
                   selectedStarData,
               }
           ]);
-
-          const timerId = window.setTimeout(() => {
-              onSelectStar(selectedStarData);
-              launchCompletionTimersRef.current.delete(launchId);
-          }, duration * 1000);
-          launchCompletionTimersRef.current.set(launchId, timerId);
       };
 
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -241,23 +232,31 @@ export const SpaceScene = ({
       window.addEventListener('keydown', handleKeyDown);
       return () => {
           window.removeEventListener('keydown', handleKeyDown);
-          launchCompletionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-          launchCompletionTimersRef.current.clear();
       };
   }, [onSelectStar, controller]);
 
   useFrame((_, delta) => {
     if (launchEffects.length === 0) return;
+    const completedEffects: LaunchEffect[] = [];
 
     setLaunchEffects((currentEffects) =>
       currentEffects
         .map((effect) => {
           const nextElapsed = effect.elapsed + delta;
-          if (nextElapsed >= effect.duration) return null;
+          if (nextElapsed >= effect.duration) {
+            completedEffects.push(effect);
+            return null;
+          }
           return { ...effect, elapsed: nextElapsed };
         })
         .filter((effect): effect is LaunchEffect => effect !== null)
     );
+
+    if (completedEffects.length > 0) {
+      completedEffects.forEach((effect) => {
+        onSelectStar(effect.selectedStarData);
+      });
+    }
   });
 
   const getLaunchPosition = (effect: LaunchEffect): Vector3 => {
