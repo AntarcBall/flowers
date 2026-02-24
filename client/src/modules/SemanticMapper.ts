@@ -5,6 +5,10 @@ function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
+function fract(value: number) {
+  return value - Math.floor(value);
+}
+
 function toSeed(key: keyof FlowerRenderParams, x: number, y: number, z: number) {
   const seed = CONFIG.SEEDS[key as keyof typeof CONFIG.SEEDS];
   const signal = Math.sin(seed.freq[0] * x + seed.phase[0]) +
@@ -139,8 +143,27 @@ export class SemanticMapper {
     const glowSeed = toSeed('fractalIntensity', normalizedY, normalizedX, normalizedZ);
     const ringContrastSeed = toSeed('ringContrast', normalizedY, normalizedZ, normalizedX);
     const depthEchoSeed = toSeed('depthEcho', normalizedX, normalizedY, normalizedZ);
+    const symmetrySeed = toSeed('symmetry', normalizedY, normalizedX, normalizedZ);
+    const ringBandsSeed = toSeed('ringBands', normalizedZ, normalizedY, normalizedX);
+    const petalCountSeed = toSeed('petalCount', normalizedZ, normalizedX, normalizedY);
+    const radialTwistSeed = toSeed('radialTwist', normalizedX, normalizedZ, normalizedY);
 
-    const hue = Math.round((hueSeedA * 300 + hueSeedB * 120) % 360);
+    const hueIndex = fract(
+      2.31 * hueSeedA +
+      3.17 * hueSeedB +
+      5.37 * lumSeed +
+      6.11 * glowSeed +
+      7.13 * ringContrastSeed +
+      11.01 * depthEchoSeed +
+      13.07 * symmetrySeed +
+      17.19 * ringBandsSeed +
+      19.23 * petalCountSeed +
+      23.29 * radialTwistSeed +
+      29.31 * normalizedX +
+      31.17 * normalizedY +
+      37.19 * normalizedZ
+    );
+    const hue = Math.round(hueIndex * 360);
     const visibilityGate = clamp01(
       0.34 * satSeed + 0.22 * glowSeed + 0.16 * lumSeed + 0.14 * ringContrastSeed + 0.14 * depthEchoSeed
     );
