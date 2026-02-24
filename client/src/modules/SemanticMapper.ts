@@ -57,4 +57,23 @@ export class SemanticMapper {
 
     return params;
   }
+
+  static mapCoordinatesToColor(x: number, y: number, z: number) {
+    const L = CONFIG.CUBE_SIZE;
+    const normalizedX = clamp01((x / L + 1) / 2);
+    const normalizedY = clamp01((y / L + 1) / 2);
+    const normalizedZ = clamp01((z / L + 1) / 2);
+
+    const hueSeedA = toSeed('m', normalizedX, normalizedY, normalizedZ);
+    const hueSeedB = toSeed('radialTwist', normalizedY, normalizedZ, normalizedX);
+    const satSeed = toSeed('petalCrest', normalizedZ, normalizedX, normalizedY);
+    const lumSeed = toSeed('coreGlow', normalizedX, normalizedY, normalizedZ);
+    const glowSeed = toSeed('fractalIntensity', normalizedY, normalizedX, normalizedZ);
+
+    const hue = Math.round((hueSeedA * 300 + hueSeedB * 120) % 360);
+    const sat = Math.round(42 + satSeed * 44 + glowSeed * 12);
+    const lum = Math.round(28 + lumSeed * 30 + satSeed * 12 + glowSeed * 10);
+
+    return `hsl(${hue}, ${sat}%, ${Math.max(16, Math.min(88, lum))}%)`;
+  }
 }

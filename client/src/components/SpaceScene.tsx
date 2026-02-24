@@ -33,6 +33,9 @@ type SpaceStar = {
   color: string;
   position: Vector3;
 };
+  
+const getStarColor = (x: number, y: number, z: number) =>
+  SemanticMapper.mapCoordinatesToColor(x, y, z);
 
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
@@ -155,7 +158,7 @@ export const SpaceScene = ({
           (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => ({
             id: s.id,
             word: s.word,
-            color: s.color,
+            color: getStarColor(s.x, s.y, s.z),
             position: new Vector3(s.x, s.y, s.z),
           })
         );
