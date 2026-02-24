@@ -4,7 +4,7 @@ import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
 import { SelectionSystem } from '../modules/SelectionSystem';
 import { useInput } from '../hooks/useInput';
-import { Vector3, Mesh, PerspectiveCamera } from 'three';
+import { Vector3, Group, PerspectiveCamera } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
 import { CONFIG } from '../config';
@@ -28,7 +28,7 @@ export const SpaceScene = ({
   const controller = useMemo(() => new SpaceshipController(), []);
   const tpsCamera = useMemo(() => new TPSCamera(), []);
   const inputRef = useInput();
-  const shipRef = useRef<Mesh>(null);
+  const shipRef = useRef<Group>(null);
   const { camera, gl } = useThree();
 
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
@@ -152,19 +152,51 @@ export const SpaceScene = ({
 
   return (
     <>
-      <mesh ref={shipRef}>
-        <coneGeometry args={[1, 4, 4]} />
-        <meshStandardMaterial color="orange" />
+      <group ref={shipRef}>
+        <mesh position={[0, 0, 1.05]} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
+          <coneGeometry args={[0.6, 1.1, 16]} />
+          <meshStandardMaterial color="#ff8f4f" metalness={0.4} roughness={0.25} />
+        </mesh>
+
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.45, 0.7, 2.4, 24]} />
+          <meshStandardMaterial color="#2b3b4f" metalness={0.8} roughness={0.2} />
+        </mesh>
+
+        <mesh position={[0, 0, -1.75]} rotation={[-Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.5, 1.0, 16]} />
+          <meshStandardMaterial color="#141c2a" metalness={0.3} roughness={0.4} />
+        </mesh>
+
+        <mesh position={[0.9, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <boxGeometry args={[1.2, 0.13, 0.25]} />
+          <meshStandardMaterial color="#45586f" metalness={0.7} roughness={0.3} />
+        </mesh>
+        <mesh position={[-0.9, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+          <boxGeometry args={[1.2, 0.13, 0.25]} />
+          <meshStandardMaterial color="#45586f" metalness={0.7} roughness={0.3} />
+        </mesh>
+
+        <mesh position={[0, 0.32, 0]} rotation={[0, Math.PI / 4, 0]}>
+          <cylinderGeometry args={[0.09, 0.09, 0.85, 12]} />
+          <meshStandardMaterial color="#4be6ff" emissive="#0d4458" emissiveIntensity={0.6} />
+        </mesh>
+
+        <mesh position={[0, -0.24, 0.1]} rotation={[0, 0, Math.PI]}>
+          <sphereGeometry args={[0.22, 16, 16]} />
+          <meshStandardMaterial color="#b0d6ff" metalness={0.2} roughness={0.2} />
+        </mesh>
+
         <axesHelper args={[5]} />
-        
+
         {debugMode && (
-             <mesh position={[0, 0, coneHeight / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-                 <coneGeometry args={[coneRadius, coneHeight, 16, 1, true]} />
-                 <meshBasicMaterial color="yellow" wireframe={true} transparent={true} opacity={0.3} />
-             </mesh>
+          <mesh position={[0, 0, coneHeight / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[coneRadius, coneHeight, 16, 1, true]} />
+            <meshBasicMaterial color="yellow" wireframe={true} transparent={true} opacity={0.3} />
+          </mesh>
         )}
-      </mesh>
-      
+      </group>
+
       {stars.map((star) => {
           const isAimed = star.id === aimedStarId;
           const showText = labelVisibleStarIds.has(star.id) || isAimed;
