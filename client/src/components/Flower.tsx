@@ -1,8 +1,8 @@
 import { memo, useMemo } from 'react';
-import { DoubleSide, type MeshPhysicalMaterialProps } from 'three';
-import { CONFIG } from '../config';
+import { AdditiveBlending, CanvasTexture, DoubleSide, SRGBColorSpace } from 'three';
 import type { FlowerRenderParams } from '../types';
-import { buildFlowerProfile, normalizeFlowerParams } from '../modules/FlowerShape';
+import { normalizeFlowerParams } from '../modules/FlowerShape';
+import { buildFlowerCanvas } from '../modules/FlowerCanvas';
 
 type FlowerProps = {
   params: FlowerRenderParams;
@@ -15,149 +15,83 @@ const clamp = (value: number, min: number, max: number) => {
   return Math.max(min, Math.min(max, value));
 };
 
-const FlowerCore = ({
-  params,
-  color,
-  scale = 1,
-  growth,
-}: FlowerProps) => {
+const FLOWER_CANVAS_SIZE = 120;
+const TEXTURE_CACHE = new Map<string, CanvasTexture>();
+
+function makeTextureKey(params: FlowerRenderParams, color: string, growth: number) {
+  return JSON.stringify({
+    color,
+    growth: Number(clamp(growth, 0, 1).toFixed(3)),
+    m: params.m,
+    n1: params.n1,
+    n2: params.n2,
+    n3: params.n3,
+    rot: params.rot,
+    petalCount: params.petalCount,
+    petalStretch: params.petalStretch,
+    petalCrest: params.petalCrest,
+    petalSpread: params.petalSpread,
+    coreRadius: params.coreRadius,
+    coreGlow: params.coreGlow,
+    rimWidth: params.rimWidth,
+    outlineWeight: params.outlineWeight,
+    symmetry: params.symmetry,
+    mandalaDepth: params.mandalaDepth,
+    ringBands: params.ringBands,
+    radialTwist: params.radialTwist,
+    innerVoid: params.innerVoid,
+    fractalIntensity: params.fractalIntensity,
+    sectorWarp: params.sectorWarp,
+    ringContrast: params.ringContrast,
+    depthEcho: params.depthEcho,
+  });
+}
+
+function getFlowerTexture(params: FlowerRenderParams, color: string, growth: number) {
+  const key = makeTextureKey(params, color, growth);
+  const cached = TEXTURE_CACHE.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const canvas = buildFlowerCanvas(params, color, FLOWER_CANVAS_SIZE, growth);
+  const texture = new CanvasTexture(canvas);
+  texture.flipY = false;
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  TEXTURE_CACHE.set(key, texture);
+  return texture;
+}
+
+const FlowerCore = ({ params, color, scale = 1, growth }: FlowerProps) => {
   const resolvedParams = useMemo(() => normalizeFlowerParams(params), [params]);
-  const profile = useMemo(() => buildFlowerProfile(resolvedParams, color), [resolvedParams, color]);
   const normalizedGrowth = clamp(growth === undefined ? 1 : growth, 0, 1);
-  const bloomT = 0.2 + Math.pow(normalizedGrowth, 0.85) * 0.8;
-
-  const pulse = normalizedGrowth === 1 ? 1 : 0.35 + 0.65 * Math.sin((normalizedGrowth * Math.PI) / 2);
-
-  const coreGlowProps: MeshPhysicalMaterialProps = {
-    color: profile.palette.core,
-    roughness: 0.15,
-    metalness: 0.35,
-    emissive: profile.palette.coreGlow,
-    emissiveIntensity: 0.4 + resolvedParams.coreGlow * 0.7,
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.2,
-    opacity: 0.8 + 0.2 * bloomT,
-    transparent: true,
-  };
+  const texture = useMemo(
+    () => getFlowerTexture(resolvedParams, color, normalizedGrowth),
+    [resolvedParams, color, normalizedGrowth],
+  );
+  const groupScale = scale * (0.25 + 0.75 * normalizedGrowth);
+  const alpha = 0.35 + 0.65 * normalizedGrowth;
+  const rim = 1 + resolvedParams.rimWidth * 0.12;
 
   return (
-    <group scale={scale * (0.3 + 0.7 * bloomT)}>
-      <group scale={[(1 + resolvedParams.rimWidth * 0.12) * (0.85 + 0.15 * normalizedGrowth), (1 + resolvedParams.rimWidth * 0.12) * (0.85 + 0.15 * normalizedGrowth), 1]}>
-        <mesh position={[0, 0, 0.2 * normalizedGrowth]}>
-          <extrudeGeometry
-            args={[
-              profile.outerShape,
-              {
-                depth: CONFIG.FLOWER_SHAPE.outerExtrudeDepth * normalizedGrowth,
-                bevelEnabled: false,
-              },
-            ]}
-          />
-          <meshPhysicalMaterial
-            color={profile.palette.outer}
-            roughness={0.3}
-            metalness={0.28}
-            emissive={profile.palette.outerGlow}
-            emissiveIntensity={0.28 + resolvedParams.coreGlow * 0.42}
-            clearcoat={0.4}
-            clearcoatRoughness={0.5}
-            side={DoubleSide}
-            transparent
-            opacity={0.95}
-          />
-        </mesh>
-
-        <mesh position={[0, 0, 0.34 * normalizedGrowth]}>
-          <extrudeGeometry
-            args={[
-              profile.innerShape,
-              {
-                depth: CONFIG.FLOWER_SHAPE.innerExtrudeDepth * normalizedGrowth,
-                bevelEnabled: false,
-              },
-            ]}
-          />
-          <meshStandardMaterial
-            color={profile.palette.inner}
-            roughness={0.62}
-            metalness={0.05}
-            emissive={profile.palette.innerGlow}
-            emissiveIntensity={0.08 + resolvedParams.coreGlow * 0.25}
-            side={DoubleSide}
-          />
-        </mesh>
-
-        <mesh position={[0, 0, 0.44 * normalizedGrowth]}>
-          <extrudeGeometry
-            args={[
-              profile.innerShape,
-              {
-                depth: CONFIG.FLOWER_SHAPE.innerExtrudeDepth * 0.55 * normalizedGrowth,
-                bevelEnabled: false,
-              },
-            ]}
-          />
-          <meshStandardMaterial
-            color={profile.palette.line}
-            roughness={0.42}
-            metalness={0.18}
-            emissive={profile.palette.innerGlow}
-            emissiveIntensity={0.16 + resolvedParams.coreGlow * 0.32}
-            side={DoubleSide}
-            transparent
-            opacity={0.45}
-          />
-        </mesh>
-
-        <mesh position={[0, 0, CONFIG.FLOWER_SHAPE.coreBaseScale * normalizedGrowth + 0.52]}>
-          <sphereGeometry args={[profile.coreRadius * (1 + 0.5 * resolvedParams.coreGlow), 28, 28]}>
-          </sphereGeometry>
-          <meshPhysicalMaterial {...coreGlowProps} />
-        </mesh>
-
-        <mesh position={[0, 0, CONFIG.FLOWER_SHAPE.coreBaseScale * normalizedGrowth + 0.66]}>
-          <sphereGeometry args={[Math.max(0.003, profile.coreRadius * 0.55), 24, 24]}>
-          </sphereGeometry>
-          <meshStandardMaterial
-            color={profile.palette.inner}
-            roughness={0.22}
-            metalness={0.32}
-            emissive={profile.palette.coreGlow}
-            emissiveIntensity={0.5 + resolvedParams.coreGlow * 0.5}
-          />
-        </mesh>
-
-        <line>
-          <bufferGeometry>
-            <bufferAttribute attach="attributes-position" args={[profile.outerLine, 3]} />
-          </bufferGeometry>
-          <lineBasicMaterial color={profile.palette.edge} transparent opacity={0.95} linewidth={profile.strokeWeight * 1.2 * bloomT} />
-        </line>
-
-        <line>
-          <bufferGeometry>
-            <bufferAttribute attach="attributes-position" args={[profile.innerLine, 3]} />
-          </bufferGeometry>
-          <lineBasicMaterial
-            color={profile.palette.line}
-            transparent
-            opacity={0.3 + 0.2 * resolvedParams.coreGlow}
-            linewidth={Math.max(0.8, profile.strokeWeight * 0.7)}
-          />
-        </line>
-      </group>
-
-      <mesh position={[0, 0, -0.45 * (1 - normalizedGrowth)]}>
-        <sphereGeometry args={[profile.haloRadius * (0.45 + 0.55 * bloomT) * pulse, 18, 18]}>
-        </sphereGeometry>
-        <meshStandardMaterial
-          color={profile.palette.outerGlow}
-          roughness={1}
-          metalness={0}
-          transparent
-          opacity={0.12 * normalizedGrowth * pulse}
+    <group scale={[groupScale, groupScale, 1]}>
+      <mesh position={[0, 0, 0.02]}>
+        <planeGeometry args={[rim * 1.16, rim * 1.16]} />
+        <meshBasicMaterial
+          map={texture}
           side={DoubleSide}
+          transparent
+          opacity={0.22 * alpha}
+          blending={AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
         />
+      </mesh>
+
+      <mesh>
+        <planeGeometry args={[rim, rim]} />
+        <meshBasicMaterial map={texture} side={DoubleSide} transparent opacity={alpha} toneMapped={false} />
       </mesh>
     </group>
   );
