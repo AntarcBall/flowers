@@ -1,3 +1,7 @@
 ﻿data/glove.6B.50d.txt
 client/public/stars.json
 analysis_summary.md
+data/cc.ko.300.vec
+*.txt
+*.vec
+*.Identifier

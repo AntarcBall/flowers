@@ -16,8 +16,8 @@ export class GardenManager {
   update(inputs: Record<string, boolean>, camera: OrthographicCamera) {
     const { SCROLL_SPEED, GARDEN_SIZE } = CONFIG;
 
-    if (inputs['w'] || inputs['W']) this.cameraPosition.y += SCROLL_SPEED;
-    if (inputs['s'] || inputs['S']) this.cameraPosition.y -= SCROLL_SPEED;
+    if (inputs['w'] || inputs['W']) this.cameraPosition.y -= SCROLL_SPEED;
+    if (inputs['s'] || inputs['S']) this.cameraPosition.y += SCROLL_SPEED;
     if (inputs['a'] || inputs['A']) this.cameraPosition.x -= SCROLL_SPEED;
     if (inputs['d'] || inputs['D']) this.cameraPosition.x += SCROLL_SPEED;
 

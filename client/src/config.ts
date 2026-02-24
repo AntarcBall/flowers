@@ -30,14 +30,20 @@ export const CONFIG = {
 
   CONE_ANGLE_THRESHOLD: Math.PI / 7, 
   TEXT_LOD_DISTANCE: 150, 
+  TEXT_MIN_FONT_SIZE: 280,
+  TEXT_SIZE_BREAKPOINT: 260,
+  TEXT_LINEAR_FONT_SLOPE: 280 / 260,
+  TEXT_MAX_FONT_SIZE: 460,
 
   TEXT_STYLE: {
     color: 'black',
     background: 'white',
     padding: '4px 6px',
     borderRadius: '4px',
-    fontSize: '140px',
+    fontSize: '280px',
     fontWeight: 'bold',
+    writingMode: 'horizontal-tb',
+    whiteSpace: 'nowrap',
     opacity: 1,
   },
 

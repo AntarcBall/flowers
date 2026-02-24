@@ -14,8 +14,8 @@ export class SpaceshipController {
     if (inputState['e'] || inputState['E']) this.speed -= ACCEL_SPEED;
     this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
 
-    if (inputState['w'] || inputState['W']) this.angularVelocity.pitch += ACCEL_ROT;
-    if (inputState['s'] || inputState['S']) this.angularVelocity.pitch -= ACCEL_ROT;
+    if (inputState['w'] || inputState['W']) this.angularVelocity.pitch -= ACCEL_ROT;
+    if (inputState['s'] || inputState['S']) this.angularVelocity.pitch += ACCEL_ROT;
     if (inputState['a'] || inputState['A']) this.angularVelocity.yaw += ACCEL_ROT;
     if (inputState['d'] || inputState['D']) this.angularVelocity.yaw -= ACCEL_ROT;
 

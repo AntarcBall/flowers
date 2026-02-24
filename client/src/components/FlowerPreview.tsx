@@ -31,6 +31,8 @@ export const FlowerPreview = ({
         if (!ctx) return;
 
         const { m, n1, n2, n3, rot = 0 } = params;
+        const mInteger = Math.max(1, Math.round(m));
+        const N = Math.max(180, 180 * mInteger);
         const scale = size * 0.3; 
         
         ctx.clearRect(0, 0, size, size);
@@ -38,7 +40,6 @@ export const FlowerPreview = ({
         ctx.translate(size / 2, size / 2);
 
         ctx.beginPath();
-        const N = 500;
         for (let i = 0; i <= N; i++) {
             const phi = (i / N) * TAU;
             const r = superR(phi, m, n1, n2, n3) * scale;

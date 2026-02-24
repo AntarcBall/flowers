@@ -9,7 +9,22 @@ import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
 import { CONFIG } from '../config';
 
-export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectStar: (data: any) => void, debugMode: boolean, onAimChange: (data: any) => void }) => {
+type Telemetry = {
+  speed: number;
+  position: { x: number; y: number; z: number };
+};
+
+export const SpaceScene = ({
+  onSelectStar,
+  debugMode,
+  onAimChange,
+  onTelemetryChange
+}: {
+  onSelectStar: (data: any) => void;
+  debugMode: boolean;
+  onAimChange: (data: any) => void;
+  onTelemetryChange: (data: Telemetry) => void;
+}) => {
   const controller = useMemo(() => new SpaceshipController(), []);
   const tpsCamera = useMemo(() => new TPSCamera(), []);
   const inputRef = useInput();
@@ -18,12 +33,17 @@ export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectS
 
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
   const aimedStarRef = useRef<number | null>(null);
+  const telemetryAccumRef = useRef(0);
+  const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
+  const labelVisibleKeyRef = useRef('');
+  const MAX_VISIBLE_LABELS = 12;
   
   const [stars, setStars] = useState<any[]>([]);
   const starsRef = useRef<any[]>([]);
 
   useEffect(() => {
-    fetch('/stars.json')
+    const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
+    fetch(starsUrl)
         .then(res => res.json())
         .then(data => {
             const loadedStars = data.map((s: any) => ({
@@ -44,8 +64,46 @@ export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectS
     }
     tpsCamera.update(camera as PerspectiveCamera, controller);
 
+    telemetryAccumRef.current += delta;
+    if (telemetryAccumRef.current >= 0.1) {
+      onTelemetryChange({
+        speed: controller.speed,
+        position: {
+          x: controller.position.x,
+          y: controller.position.y,
+          z: controller.position.z
+        }
+      });
+      telemetryAccumRef.current = 0;
+    }
+
     const forward = controller.getForwardVector();
     const bestTarget = SelectionSystem.getBestTarget(controller.position, forward, stars);
+
+    const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * 1.2;
+    const labelConeCosThreshold = Math.cos(labelConeAngle);
+    const labelConeLength = 50 * 14;
+    const visibleCandidates: Array<{ id: number; dot: number; dist: number }> = [];
+    for (const star of starsRef.current) {
+      const toStar = new Vector3().subVectors(star.position, controller.position);
+      const dist = toStar.length();
+      if (dist === 0 || dist > labelConeLength) continue;
+      toStar.normalize();
+      const dot = forward.dot(toStar);
+      if (dot > labelConeCosThreshold) {
+        visibleCandidates.push({ id: star.id, dot, dist });
+      }
+    }
+    visibleCandidates.sort((a, b) => {
+      if (b.dot !== a.dot) return b.dot - a.dot;
+      return a.dist - b.dist;
+    });
+    const visibleIds = visibleCandidates.slice(0, MAX_VISIBLE_LABELS).map((v) => v.id);
+    const visibleKey = visibleIds.join(',');
+    if (visibleKey !== labelVisibleKeyRef.current) {
+      setLabelVisibleStarIds(new Set(visibleIds));
+      labelVisibleKeyRef.current = visibleKey;
+    }
     
     if (bestTarget !== aimedStarRef.current) {
         setAimedStarId(bestTarget);
@@ -70,7 +128,7 @@ export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectS
               const star = starsRef.current.find(s => s.id === currentAimedId);
               if (star) {
                   const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-                  onSelectStar({ color: star.color, params, word: star.word }); 
+                  onSelectStar({ color: star.color, params, word: star.word });
               }
           }
       };
@@ -82,8 +140,15 @@ export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectS
       };
   }, [gl.domElement, onSelectStar]); 
 
-  const coneHeight = 50;
-  const coneRadius = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD) * coneHeight;
+  const coneHeight = 50 * 14;
+  const coneRadius = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * coneHeight;
+  const getLabelFontSize = (distance: number) => {
+    const c = CONFIG.TEXT_MIN_FONT_SIZE;
+    const d1 = CONFIG.TEXT_SIZE_BREAKPOINT;
+    const a = CONFIG.TEXT_LINEAR_FONT_SLOPE;
+    const raw = distance < d1 ? c : a * distance;
+    return Math.min(CONFIG.TEXT_MAX_FONT_SIZE, Math.max(c, raw));
+  };
 
   return (
     <>
@@ -102,7 +167,9 @@ export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectS
       
       {stars.map((star) => {
           const isAimed = star.id === aimedStarId;
-          const showText = isAimed; 
+          const showText = labelVisibleStarIds.has(star.id) || isAimed;
+          const distanceToCamera = camera.position.distanceTo(star.position);
+          const labelFontSize = Math.round(getLabelFontSize(distanceToCamera));
           
           return (
             <group key={star.id} position={star.position}>
@@ -120,7 +187,7 @@ export const SpaceScene = ({ onSelectStar, debugMode, onAimChange }: { onSelectS
 
                 {showText && (
                     <Html distanceFactor={10}>
-                        <div style={CONFIG.TEXT_STYLE as any}>
+                        <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
                             {star.word}
                         </div>
                     </Html>

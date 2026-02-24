@@ -23,6 +23,8 @@ export class SemanticMapper {
       params[key] = range.min + t * (range.max - range.min);
     }
 
+    params.m = Math.round(params.m);
+
     return params;
   }
 }

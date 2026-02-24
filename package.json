@@ -1,0 +1,16 @@
+{
+  "name": "flowers-pipeline",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:words:umap": "node build-umap-words.mjs",
+    "build:words:umap:ko": "node build-umap-words.mjs --words data/korean_words.txt --embeddings data/cc.ko.300.vec --out client/public/stars.json --selectedVectorsOut data/selected_korean_vectors.cc.ko.300.vec --missingOut data/selected_korean_vectors.cc.ko.300.missing.txt --seed 42 --metric cosine --l2Normalize true --minDist 0.02 --nNeighbors 8 --spread 1.0 --scale 250",
+    "dev": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "preview": "npm --prefix client run preview"
+  },
+  "dependencies": {
+    "seedrandom": "^3.0.5",
+    "umap-js": "^1.4.0"
+  }
+}
