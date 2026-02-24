@@ -1,12 +1,14 @@
 import { OrthographicCamera, Vector3, MathUtils } from 'three';
 import { PersistenceService } from './PersistenceService';
 import type { FlowerData } from './PersistenceService';
+import type { FlowerRenderParams } from '../types';
 import { CONFIG } from '../config';
+import { normalizeFlowerParams } from './FlowerShape';
 import { v4 as uuidv4 } from 'uuid';
 
 export class GardenManager {
   flowers: FlowerData[] = [];
-  selectedStarData: { color: string; params: Record<string, number> } | null = null;
+  selectedStarData: { color: string; params: FlowerRenderParams } | null = null;
   cameraPosition = new Vector3(CONFIG.GARDEN_SIZE / 2, CONFIG.GARDEN_SIZE / 2, 100);
 
   init() {
@@ -31,18 +33,21 @@ export class GardenManager {
   plantFlower(x: number, y: number) {
     if (!this.selectedStarData) return null;
 
+    const now = Date.now();
+    const normalizedParams = normalizeFlowerParams(this.selectedStarData.params);
     const newFlower: FlowerData = {
       id: uuidv4(),
       x,
       y,
       color: this.selectedStarData.color,
-      params: this.selectedStarData.params,
-      timestamp: Date.now(),
+      params: normalizedParams,
+      timestamp: now,
+      plantedAt: now,
     };
 
     this.flowers.push(newFlower);
     PersistenceService.save(this.flowers);
-    
+
     return newFlower;
   }
 }

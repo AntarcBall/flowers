@@ -1,76 +1,144 @@
-import { useMemo } from 'react';
-import { Vector3, Shape, DoubleSide } from 'three';
+import { memo, useMemo } from 'react';
+import { DoubleSide, type MeshPhysicalMaterialProps } from 'three';
+import { CONFIG } from '../config';
+import type { FlowerRenderParams } from '../types';
+import { buildFlowerProfile, normalizeFlowerParams } from '../modules/FlowerShape';
 
-const TAU = Math.PI * 2;
-
-function superR(phi: number, m: number, n1: number, n2: number, n3: number, a = 1, b = 1) {
-    const t1 = Math.pow(Math.abs(Math.cos(m * phi / 4) / a), n2);
-    const t2 = Math.pow(Math.abs(Math.sin(m * phi / 4) / b), n3);
-    const base = t1 + t2;
-
-    if (base <= 0 || !Number.isFinite(base)) return 0;
-    const r = Math.pow(base, -1 / n1);
-    if (!Number.isFinite(r)) return 0;
-    return r;
-}
-
-export const Flower = ({ 
-    params, 
-    color, 
-    scale = 1 
-}: { 
-    params: { m: number, n1: number, n2: number, n3: number, rot?: number }, 
-    color: string, 
-    scale?: number 
-}) => {
-    const points = useMemo(() => {
-        const { m, n1, n2, n3, rot = 0 } = params;
-        const mInteger = Math.max(1, Math.round(m));
-        const N = Math.max(180, 360 * mInteger);
-        const pts = [];
-
-        for (let i = 0; i <= N; i++) {
-            const phi = (i / N) * TAU;
-            const r = superR(phi, m, n1, n2, n3);
-            const x = r * Math.cos(phi + rot);
-            const y = r * Math.sin(phi + rot);
-            pts.push(new Vector3(x, y, 0));
-        }
-        return pts;
-    }, [params]);
-
-    const shape = useMemo(() => {
-        if (points.length < 3) return null;
-
-        const path = new Shape();
-        const [firstPoint, ...restPoints] = points;
-        if (!firstPoint) return null;
-
-        path.moveTo(firstPoint.x, firstPoint.y);
-        for (const point of restPoints) {
-            path.lineTo(point.x, point.y);
-        }
-        return path;
-    }, [points]);
-
-    return (
-        <group scale={[scale, scale, scale]}>
-            {shape && (
-                <mesh>
-                    <shapeGeometry args={[shape]} />
-                    <meshBasicMaterial color={color} side={DoubleSide} />
-                </mesh>
-            )}
-             
-             <line>
-                <bufferGeometry>
-                    <bufferAttribute 
-                        attach="attributes-position"
-                        args={[new Float32Array(points.flatMap(p => [p.x, p.y, p.z])), 3]}
-                    />
-                </bufferGeometry>
-                <lineBasicMaterial color={color} linewidth={2} />
-             </line>
-        </group>
-    );
+type FlowerProps = {
+  params: FlowerRenderParams;
+  color: string;
+  scale?: number;
+  growth?: number;
 };
+
+const clamp = (value: number, min: number, max: number) => {
+  return Math.max(min, Math.min(max, value));
+};
+
+const FlowerCore = ({
+  params,
+  color,
+  scale = 1,
+  growth,
+}: FlowerProps) => {
+  const resolvedParams = useMemo(() => normalizeFlowerParams(params), [params]);
+  const profile = useMemo(() => buildFlowerProfile(resolvedParams, color), [resolvedParams, color]);
+  const normalizedGrowth = clamp(growth === undefined ? 1 : growth, 0, 1);
+  const bloomT = 0.2 + Math.pow(normalizedGrowth, 0.85) * 0.8;
+
+  const pulse = normalizedGrowth === 1 ? 1 : 0.35 + 0.65 * Math.sin((normalizedGrowth * Math.PI) / 2);
+
+  const coreGlowProps: MeshPhysicalMaterialProps = {
+    color: profile.palette.core,
+    roughness: 0.15,
+    metalness: 0.35,
+    emissive: profile.palette.coreGlow,
+    emissiveIntensity: 0.4 + resolvedParams.coreGlow * 0.7,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.2,
+    opacity: 0.8 + 0.2 * bloomT,
+    transparent: true,
+  };
+
+  return (
+    <group scale={scale * (0.3 + 0.7 * bloomT)}>
+      <group scale={[(1 + resolvedParams.rimWidth * 0.12) * (0.85 + 0.15 * normalizedGrowth), (1 + resolvedParams.rimWidth * 0.12) * (0.85 + 0.15 * normalizedGrowth), 1]}>
+        <mesh position={[0, 0, 0.2 * normalizedGrowth]}>
+          <extrudeGeometry
+            args={[
+              profile.outerShape,
+              {
+                depth: CONFIG.FLOWER_SHAPE.outerExtrudeDepth * normalizedGrowth,
+                bevelEnabled: false,
+              },
+            ]}
+          />
+          <meshPhysicalMaterial
+            color={profile.palette.outer}
+            roughness={0.48}
+            metalness={0.12}
+            emissive={profile.palette.outerGlow}
+            emissiveIntensity={0.15 + resolvedParams.coreGlow * 0.4}
+            clearcoat={0.4}
+            clearcoatRoughness={0.5}
+            side={DoubleSide}
+            transparent
+            opacity={0.95}
+          />
+        </mesh>
+
+        <mesh position={[0, 0, 0.34 * normalizedGrowth]}>
+          <extrudeGeometry
+            args={[
+              profile.innerShape,
+              {
+                depth: CONFIG.FLOWER_SHAPE.innerExtrudeDepth * normalizedGrowth,
+                bevelEnabled: false,
+              },
+            ]}
+          />
+          <meshStandardMaterial
+            color={profile.palette.inner}
+            roughness={0.52}
+            metalness={0.02}
+            emissive={profile.palette.innerGlow}
+            emissiveIntensity={0.08 + resolvedParams.coreGlow * 0.25}
+            side={DoubleSide}
+          />
+        </mesh>
+
+        <mesh position={[0, 0, CONFIG.FLOWER_SHAPE.coreBaseScale * normalizedGrowth + 0.52]}>
+          <sphereGeometry args={[profile.coreRadius * (1 + 0.5 * resolvedParams.coreGlow), 28, 28]}>
+          </sphereGeometry>
+          <meshPhysicalMaterial {...coreGlowProps} />
+        </mesh>
+
+        <mesh position={[0, 0, CONFIG.FLOWER_SHAPE.coreBaseScale * normalizedGrowth + 0.66]}>
+          <sphereGeometry args={[Math.max(0.003, profile.coreRadius * 0.55), 24, 24]}>
+          </sphereGeometry>
+          <meshStandardMaterial
+            color={profile.palette.inner}
+            roughness={0.22}
+            metalness={0.32}
+            emissive={profile.palette.coreGlow}
+            emissiveIntensity={0.5 + resolvedParams.coreGlow * 0.5}
+          />
+        </mesh>
+
+        <line>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[profile.outerLine, 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial color={profile.palette.edge} transparent opacity={0.95} linewidth={profile.strokeWeight * 1.2 * bloomT} />
+        </line>
+
+        <line>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[profile.innerLine, 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial
+            color={profile.palette.line}
+            transparent
+            opacity={0.3 + 0.2 * resolvedParams.coreGlow}
+            linewidth={Math.max(0.8, profile.strokeWeight * 0.7)}
+          />
+        </line>
+      </group>
+
+      <mesh position={[0, 0, -0.45 * (1 - normalizedGrowth)]}>
+        <sphereGeometry args={[profile.haloRadius * (0.45 + 0.55 * bloomT) * pulse, 18, 18]}>
+        </sphereGeometry>
+        <meshStandardMaterial
+          color={profile.palette.outerGlow}
+          roughness={1}
+          metalness={0}
+          transparent
+          opacity={0.12 * normalizedGrowth * pulse}
+          side={DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+};
+
+export const Flower = memo(FlowerCore);

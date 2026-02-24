@@ -2,7 +2,6 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
-import { SelectionSystem } from '../modules/SelectionSystem';
 import { useInput } from '../hooks/useInput';
 import { Vector3, Group, PerspectiveCamera, AdditiveBlending } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
@@ -22,9 +21,65 @@ type LaunchEffect = {
   duration: number;
 };
 
+type AimCandidate = {
+  id: number;
+  dot: number;
+  dist: number;
+};
+
+type SpaceStar = {
+  id: number;
+  word: string;
+  color: string;
+  position: Vector3;
+};
+
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
+
+const BACKGROUND_STAR_COUNT = 2400;
+const BACKGROUND_STAR_RADIUS_MIN = 900;
+const BACKGROUND_STAR_RADIUS_MAX = 1800;
+const MAX_VISIBLE_LABELS = 12;
+const LABEL_CONE_ANGLE = CONFIG.CONE_ANGLE_THRESHOLD * 1.2;
+const LABEL_CONE_COS = Math.cos(LABEL_CONE_ANGLE);
+const TARGET_CONE_COS = Math.cos(CONFIG.CONE_ANGLE_THRESHOLD);
+const LABEL_CONE_LENGTH = 50 * 14;
+const CONE_HEIGHT = 50 * 14;
+const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
+
+function insertCandidate(
+  candidates: AimCandidate[],
+  candidate: AimCandidate,
+  maxItems: number,
+) {
+  let insertIndex = candidates.length;
+  for (let i = 0; i < candidates.length; i += 1) {
+    const item = candidates[i];
+    if (candidate.dot > item.dot || (candidate.dot === item.dot && candidate.dist < item.dist)) {
+      insertIndex = i;
+      break;
+    }
+  }
+
+  if (insertIndex >= maxItems) {
+    return;
+  }
+
+  candidates.splice(insertIndex, 0, candidate);
+  if (candidates.length > maxItems) {
+    candidates.pop();
+  }
+}
+
+function createStarLookup(list: SpaceStar[]) {
+  const map = new Map<number, SpaceStar>();
+  for (const star of list) {
+    map.set(star.id, star);
+  }
+  return map;
+}
 
 export const SpaceScene = ({
   onSelectStar,
@@ -44,9 +99,16 @@ export const SpaceScene = ({
   const backgroundStarRef = useRef<any>(null);
   const { camera } = useThree();
 
-  const BACKGROUND_STAR_COUNT = 2400;
-  const BACKGROUND_STAR_RADIUS_MIN = 900;
-  const BACKGROUND_STAR_RADIUS_MAX = 1800;
+  const [aimedStarId, setAimedStarId] = useState<number | null>(null);
+  const aimedStarRef = useRef<number | null>(null);
+  const telemetryAccumRef = useRef(0);
+  const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
+  const labelVisibleKeyRef = useRef('');
+  const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
+
+  const [stars, setStars] = useState<SpaceStar[]>([]);
+  const starsRef = useRef<SpaceStar[]>([]);
+  const starsByIdRef = useRef<Map<number, SpaceStar>>(new Map());
 
   const backgroundStars = useMemo(() => {
     const total = BACKGROUND_STAR_COUNT * 3;
@@ -77,43 +139,45 @@ export const SpaceScene = ({
       colors[i3 + 2] = 1.0;
     }
 
-    return { positions, colors, count: BACKGROUND_STAR_COUNT };
+    return { positions, colors };
   }, []);
 
-  const [aimedStarId, setAimedStarId] = useState<number | null>(null);
-  const aimedStarRef = useRef<number | null>(null);
-  const telemetryAccumRef = useRef(0);
-  const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
-  const labelVisibleKeyRef = useRef('');
-  const MAX_VISIBLE_LABELS = 12;
-  const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
-  
-  const [stars, setStars] = useState<any[]>([]);
-  const starsRef = useRef<any[]>([]);
+  const getLabelFontSize = (distance: number) => {
+    const c = CONFIG.TEXT_MIN_FONT_SIZE;
+    const d1 = CONFIG.TEXT_SIZE_BREAKPOINT;
+    const a = CONFIG.TEXT_LINEAR_FONT_SLOPE;
+    const raw = distance < d1 ? c : a * distance;
+    return Math.min(CONFIG.TEXT_MAX_FONT_SIZE, Math.max(c, raw));
+  };
 
   useEffect(() => {
     const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
     fetch(starsUrl)
-        .then(res => res.json())
-        .then(data => {
-            const loadedStars = data.map((s: any) => ({
-                ...s,
-                position: new Vector3(s.x, s.y, s.z)
-            }));
-            setStars(loadedStars);
-            starsRef.current = loadedStars;
-        })
-        .catch(err => console.error("Failed to load stars:", err));
+      .then((res) => res.json())
+      .then((data) => {
+        const loadedStars = data.map(
+          (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => ({
+            id: s.id,
+            word: s.word,
+            color: s.color,
+            position: new Vector3(s.x, s.y, s.z),
+          })
+        );
+        setStars(loadedStars);
+        starsRef.current = loadedStars;
+        starsByIdRef.current = createStarLookup(loadedStars);
+      })
+      .catch((err) => console.error('Failed to load stars:', err));
   }, []);
 
   useFrame((_, delta) => {
     controller.update(delta, inputRef.current);
     if (shipRef.current) {
-        shipRef.current.position.copy(controller.position);
-        shipRef.current.quaternion.copy(controller.quaternion);
+      shipRef.current.position.copy(controller.position);
+      shipRef.current.quaternion.copy(controller.quaternion);
     }
     if (backgroundStarRef.current) {
-        backgroundStarRef.current.position.copy(camera.position);
+      backgroundStarRef.current.position.copy(camera.position);
     }
     tpsCamera.update(camera as PerspectiveCamera, controller);
 
@@ -131,82 +195,86 @@ export const SpaceScene = ({
     }
 
     const forward = controller.getForwardVector();
-    const bestTarget = SelectionSystem.getBestTarget(controller.position, forward, stars);
+    const candidates: AimCandidate[] = [];
+    let bestTargetId: number | null = null;
+    let bestDist = Infinity;
+    const toStar = new Vector3();
 
-    const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * 1.2;
-    const labelConeCosThreshold = Math.cos(labelConeAngle);
-    const labelConeLength = 50 * 14;
-    const visibleCandidates: Array<{ id: number; dot: number; dist: number }> = [];
     for (const star of starsRef.current) {
-      const toStar = new Vector3().subVectors(star.position, controller.position);
+      toStar.subVectors(star.position, controller.position);
       const dist = toStar.length();
-      if (dist === 0 || dist > labelConeLength) continue;
+      if (dist === 0) {
+        continue;
+      }
       toStar.normalize();
       const dot = forward.dot(toStar);
-      if (dot > labelConeCosThreshold) {
-        visibleCandidates.push({ id: star.id, dot, dist });
+
+      if (dot > TARGET_CONE_COS && dist < bestDist) {
+        bestDist = dist;
+        bestTargetId = star.id;
+      }
+
+      if (dist <= LABEL_CONE_LENGTH && dot > LABEL_CONE_COS) {
+        insertCandidate(candidates, { id: star.id, dot, dist }, MAX_VISIBLE_LABELS);
       }
     }
-    visibleCandidates.sort((a, b) => {
-      if (b.dot !== a.dot) return b.dot - a.dot;
-      return a.dist - b.dist;
-    });
-    const visibleIds = visibleCandidates.slice(0, MAX_VISIBLE_LABELS).map((v) => v.id);
+
+    const visibleIds = candidates.map((candidate) => candidate.id);
     const visibleKey = visibleIds.join(',');
     if (visibleKey !== labelVisibleKeyRef.current) {
       setLabelVisibleStarIds(new Set(visibleIds));
       labelVisibleKeyRef.current = visibleKey;
     }
-    
-    if (bestTarget !== aimedStarRef.current) {
-        setAimedStarId(bestTarget);
-        aimedStarRef.current = bestTarget;
-        
-        if (bestTarget !== null) {
-            const star = starsRef.current.find(s => s.id === bestTarget);
-            if (star) {
-                const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-                onAimChange({ color: star.color, params, word: star.word });
-            }
-        } else {
-            onAimChange(null);
+
+    if (bestTargetId !== aimedStarRef.current) {
+      setAimedStarId(bestTargetId);
+      aimedStarRef.current = bestTargetId;
+
+      if (bestTargetId !== null) {
+        const star = starsByIdRef.current.get(bestTargetId);
+        if (star) {
+          const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
+          onAimChange({ color: star.color, params, word: star.word });
         }
+      } else {
+        onAimChange(null);
+      }
     }
   });
 
   useEffect(() => {
-      const selectAimedStar = () => {
-          const currentAimedId = aimedStarRef.current;
-          if (currentAimedId === null) return;
+    const selectAimedStar = () => {
+      const currentAimedId = aimedStarRef.current;
+      if (currentAimedId === null) return;
 
-          const star = starsRef.current.find(s => s.id === currentAimedId);
-          if (!star) return;
+      const star = starsByIdRef.current.get(currentAimedId);
+      if (!star) return;
 
-          const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-          onSelectStar({ color: star.color, params, word: star.word });
-          setLaunchEffects((prev) => [
-              ...prev.slice(-6),
-              {
-                  id: makeLaunchId(),
-                  start: new Vector3().copy(controller.position),
-                  target: new Vector3().copy(star.position),
-                  elapsed: 0,
-                  duration: 1.45
-              }
-          ]);
-      };
+      const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
+      onSelectStar({ color: star.color, params, word: star.word });
+      setLaunchEffects((prev) => [
+        ...prev.slice(-6),
+        {
+          id: makeLaunchId(),
+          start: new Vector3().copy(controller.position),
+          target: new Vector3().copy(star.position),
+          elapsed: 0,
+          duration: 1.45
+        }
+      ]);
+    };
 
-      const handleKeyDown = (event: KeyboardEvent) => {
-          if (event.code !== 'Space' && event.key !== ' ') return;
-          if (event.repeat) return;
-          event.preventDefault();
-          selectAimedStar();
-      };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      if (event.repeat) return;
+      event.preventDefault();
+      selectAimedStar();
+    };
 
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-          window.removeEventListener('keydown', handleKeyDown);
-      };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [onSelectStar, controller]);
 
   useFrame((_, delta) => {
@@ -224,70 +292,131 @@ export const SpaceScene = ({
   });
 
   const getLaunchPosition = (effect: LaunchEffect): Vector3 => {
-      const progress = clamp01(effect.elapsed / effect.duration);
-      const outboundRatio = 0.55;
-      const shipPosition = shipRef.current?.position ?? new Vector3();
+    const progress = clamp01(effect.elapsed / effect.duration);
+    const outboundRatio = 0.55;
+    const shipPosition = shipRef.current?.position ?? new Vector3();
 
-      if (progress <= outboundRatio) {
-          const segmentT = easeOutCubic(clamp01(progress / outboundRatio));
-          return effect.start.clone().lerp(effect.target, segmentT);
-      }
+    if (progress <= outboundRatio) {
+      const segmentT = easeOutCubic(clamp01(progress / outboundRatio));
+      return effect.start.clone().lerp(effect.target, segmentT);
+    }
 
-      const segmentT = easeOutCubic(clamp01((progress - outboundRatio) / (1 - outboundRatio)));
-      return effect.target.clone().lerp(shipPosition, segmentT);
+    const segmentT = easeOutCubic(clamp01((progress - outboundRatio) / (1 - outboundRatio)));
+    return effect.target.clone().lerp(shipPosition, segmentT);
   };
 
-  const coneHeight = 50 * 14;
-  const coneRadius = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * coneHeight;
-  const getLabelFontSize = (distance: number) => {
-    const c = CONFIG.TEXT_MIN_FONT_SIZE;
-    const d1 = CONFIG.TEXT_SIZE_BREAKPOINT;
-    const a = CONFIG.TEXT_LINEAR_FONT_SLOPE;
-    const raw = distance < d1 ? c : a * distance;
-    return Math.min(CONFIG.TEXT_MAX_FONT_SIZE, Math.max(c, raw));
-  };
+  const starMeshes = useMemo(() => {
+    return stars.map((star) => {
+      const isAimed = star.id === aimedStarId;
+      const showText = labelVisibleStarIds.has(star.id) || isAimed;
+      const distanceToCamera = camera.position.distanceTo(star.position);
+      const labelFontSize = Math.round(getLabelFontSize(distanceToCamera));
+
+      return (
+        <group key={star.id} position={star.position}>
+          <mesh>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshBasicMaterial color={star.color} />
+          </mesh>
+
+          {isAimed && (
+            <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
+              <coneGeometry args={[1, 2, 4]} />
+              <meshBasicMaterial color="white" />
+            </mesh>
+          )}
+
+          {showText && (
+            <Html distanceFactor={10}>
+              <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
+                {star.word}
+              </div>
+            </Html>
+          )}
+        </group>
+      );
+    });
+  }, [aimedStarId, labelVisibleStarIds, stars, camera.position.x, camera.position.y, camera.position.z]);
 
   return (
     <>
       <group ref={shipRef}>
-        <mesh position={[0, 0, 1.05]} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
-          <coneGeometry args={[0.6, 1.1, 16]} />
-          <meshStandardMaterial color="#ffffff" metalness={0.8} roughness={0.15} emissive="#ffb35a" emissiveIntensity={0.35} />
-        </mesh>
+        <group>
+          <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <capsuleGeometry args={[0.28, 1.6, 12, 22]} />
+            <meshPhysicalMaterial
+              color="#a3cfff"
+              metalness={0.82}
+              roughness={0.18}
+              clearcoat={1}
+              clearcoatRoughness={0.12}
+              emissive="#0f3a5f"
+              emissiveIntensity={0.16}
+            />
+          </mesh>
 
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.45, 0.7, 2.4, 24]} />
-          <meshStandardMaterial color="#2cffea" metalness={0.55} roughness={0.2} emissive="#005f87" emissiveIntensity={0.5} />
-        </mesh>
+          <mesh position={[0, 0, 1.18]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.32, 0.7, 28]} />
+            <meshPhysicalMaterial
+              color="#f8ffff"
+              metalness={0.2}
+              roughness={0.1}
+              emissive="#6bc8ff"
+              emissiveIntensity={0.45}
+              opacity={0.92}
+              transparent
+            />
+          </mesh>
 
-        <mesh position={[0, 0, -1.75]} rotation={[-Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.5, 1.0, 16]} />
-          <meshStandardMaterial color="#7b5bff" metalness={0.4} roughness={0.25} emissive="#260033" emissiveIntensity={0.35} />
-        </mesh>
+          <mesh position={[0, 0, -1.16]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.44, 1.0, 20]} />
+            <meshPhysicalMaterial
+              color="#1d2f6b"
+              metalness={0.75}
+              roughness={0.2}
+              emissive="#1f104a"
+              emissiveIntensity={0.25}
+            />
+          </mesh>
 
-        <mesh position={[0.9, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <boxGeometry args={[1.2, 0.13, 0.25]} />
-          <meshStandardMaterial color="#ffea00" metalness={0.35} roughness={0.2} emissive="#5a4a00" emissiveIntensity={0.35} />
-        </mesh>
-        <mesh position={[-0.9, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
-          <boxGeometry args={[1.2, 0.13, 0.25]} />
-          <meshStandardMaterial color="#ffea00" metalness={0.35} roughness={0.2} emissive="#5a4a00" emissiveIntensity={0.35} />
-        </mesh>
+          <mesh position={[0, -0.08, -1.08]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.16, 0.08, 0.5, 16]} />
+            <meshStandardMaterial color="#ff9b2d" metalness={0.8} roughness={0.12} emissive="#7a2600" emissiveIntensity={0.65} />
+          </mesh>
 
-        <mesh position={[0, 0.32, 0]} rotation={[0, Math.PI / 4, 0]}>
-          <cylinderGeometry args={[0.09, 0.09, 0.85, 12]} />
-          <meshStandardMaterial color="#4be6ff" metalness={0.15} roughness={0.2} emissive="#0d4458" emissiveIntensity={0.8} />
-        </mesh>
+          <mesh position={[-0.42, 0.1, -0.06]} rotation={[-0.25, 0.2, -0.1]}>
+            <boxGeometry args={[0.42, 0.06, 0.72]} />
+            <meshPhysicalMaterial color="#2f5f9e" metalness={0.9} roughness={0.2} emissive="#143e65" emissiveIntensity={0.35} />
+          </mesh>
+          <mesh position={[0.42, 0.1, -0.06]} rotation={[-0.25, -0.2, 0.1]}>
+            <boxGeometry args={[0.42, 0.06, 0.72]} />
+            <meshPhysicalMaterial color="#2f5f9e" metalness={0.9} roughness={0.2} emissive="#143e65" emissiveIntensity={0.35} />
+          </mesh>
 
-        <mesh position={[0, -0.24, 0.1]} rotation={[0, 0, Math.PI]}>
-          <sphereGeometry args={[0.22, 16, 16]} />
-          <meshStandardMaterial color="#f4fdff" metalness={0.25} roughness={0.15} emissive="#103a60" emissiveIntensity={0.4} />
-        </mesh>
+          <mesh position={[0, 0.08, 0.34]} rotation={[-0.65, 0, 0]}>
+            <sphereGeometry args={[0.34, 26, 18]} />
+            <meshPhysicalMaterial
+              color="#d9f7ff"
+              metalness={0.05}
+              roughness={0.18}
+              transmission={0.35}
+              clearcoat={1}
+            />
+          </mesh>
 
+          <mesh position={[0, 0.17, 0.78]} rotation={[0, 0, 0]}>
+            <ringGeometry args={[0.08, 0.23, 24]} />
+            <meshBasicMaterial color="#79d5ff" transparent opacity={0.55} />
+          </mesh>
+          <mesh position={[0, 0.05, -1.62]} rotation={[0, 0, 0]}>
+            <ringGeometry args={[0.1, 0.2, 24]} />
+            <meshBasicMaterial color="#ffbf6e" transparent opacity={0.35} />
+          </mesh>
+        </group>
 
         {debugMode && (
-          <mesh position={[0, 0, coneHeight / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-            <coneGeometry args={[coneRadius, coneHeight, 16, 1, true]} />
+          <mesh position={[0, 0, CONE_HEIGHT / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[CONE_RADIUS, CONE_HEIGHT, 16, 1, true]} />
             <meshBasicMaterial color="yellow" wireframe={true} transparent={true} opacity={0.3} />
           </mesh>
         )}
@@ -295,14 +424,8 @@ export const SpaceScene = ({
 
       <points ref={backgroundStarRef} frustumCulled={false}>
         <bufferGeometry>
-          <bufferAttribute
-            attach="attributes.position"
-            args={[backgroundStars.positions, 3]}
-          />
-          <bufferAttribute
-            attach="attributes.color"
-            args={[backgroundStars.colors, 3]}
-          />
+          <bufferAttribute attach="attributes-position" args={[backgroundStars.positions, 3]} />
+          <bufferAttribute attach="attributes-color" args={[backgroundStars.colors, 3]} />
         </bufferGeometry>
         <pointsMaterial
           size={2.4}
@@ -315,36 +438,7 @@ export const SpaceScene = ({
         />
       </points>
 
-      {stars.map((star) => {
-          const isAimed = star.id === aimedStarId;
-          const showText = labelVisibleStarIds.has(star.id) || isAimed;
-          const distanceToCamera = camera.position.distanceTo(star.position);
-          const labelFontSize = Math.round(getLabelFontSize(distanceToCamera));
-          
-          return (
-            <group key={star.id} position={star.position}>
-                <mesh>
-                    <sphereGeometry args={[1, 8, 8]} />
-                    <meshBasicMaterial color={star.color} />
-                </mesh>
-                
-                {isAimed && (
-                    <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
-                        <coneGeometry args={[1, 2, 4]} />
-                        <meshBasicMaterial color="white" />
-                    </mesh>
-                )}
-
-        {showText && (
-          <Html distanceFactor={10}>
-            <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
-              {star.word}
-            </div>
-          </Html>
-        )}
-      </group>
-    );
-      })}
+      {starMeshes}
 
       {launchEffects.map((effect) => {
         const position = getLaunchPosition(effect);
@@ -357,7 +451,7 @@ export const SpaceScene = ({
           </group>
         );
       })}
-      
+
       <gridHelper args={[2000, 20]} />
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />

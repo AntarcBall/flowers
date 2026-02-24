@@ -1,77 +1,119 @@
-import { useRef, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { buildFlowerProfile } from '../modules/FlowerShape';
+import type { FlowerRenderParams } from '../types';
 
 const TAU = Math.PI * 2;
 
-function superR(phi: number, m: number, n1: number, n2: number, n3: number, a = 1, b = 1) {
-    const t1 = Math.pow(Math.abs(Math.cos(m * phi / 4) / a), n2);
-    const t2 = Math.pow(Math.abs(Math.sin(m * phi / 4) / b), n3);
-    const base = t1 + t2;
+type FlowerPreviewProps = {
+  params: FlowerRenderParams;
+  color: string;
+  size?: number;
+};
 
-    if (base <= 0 || !Number.isFinite(base)) return 0;
-    const r = Math.pow(base, -1 / n1);
-    if (!Number.isFinite(r)) return 0;
-    return r;
+function drawShape(ctx: CanvasRenderingContext2D, points: Array<{ x: number; y: number }>, color: string, alpha: number, width: number, fill = false) {
+  if (points.length === 0) return;
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i += 1) {
+    const p = points[i];
+    if (i === 0) {
+      ctx.moveTo(p.x, p.y);
+    } else {
+      ctx.lineTo(p.x, p.y);
+    }
+  }
+  ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = Math.max(1, width);
+  ctx.stroke();
+  if (fill) {
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha * 0.25;
+    ctx.fill();
+  }
 }
 
-export const FlowerPreview = ({ 
-    params, 
-    color, 
-    size = 150 
-}: { 
-    params: { m: number, n1: number, n2: number, n3: number, rot?: number }, 
-    color: string, 
-    size?: number 
-}) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+export const FlowerPreview = ({
+  params,
+  color,
+  size = 150,
+}: FlowerPreviewProps) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-        const { m, n1, n2, n3, rot = 0 } = params;
-        const mInteger = Math.max(1, Math.round(m));
-        const N = Math.max(180, 180 * mInteger);
-        const scale = size * 0.3; 
-        
-        ctx.clearRect(0, 0, size, size);
-        ctx.save();
-        ctx.translate(size / 2, size / 2);
+    const profile = buildFlowerProfile(params, color);
 
+    const s = size / 2;
+    const scale = size * 0.16;
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(s, s);
+
+    const pointsOuter = profile.outerPoints.map((point) => ({ x: point.x * scale, y: point.y * scale }));
+    const pointsInner = profile.innerPoints.map((point) => ({ x: point.x * scale * 0.78, y: point.y * scale * 0.78 }));
+
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = profile.palette.outerGlow;
+
+    drawShape(ctx, pointsOuter, profile.palette.outerGlow, 0.28, 4.2, true);
+    drawShape(ctx, pointsOuter, profile.palette.line, 1, 1.6, false);
+
+    drawShape(ctx, pointsInner, profile.palette.inner, 0.75, 2.1, true);
+    drawShape(ctx, pointsInner, profile.palette.innerGlow, 0.5, 0.8, false);
+
+    for (let i = 0; i < profile.outerPoints.length; i += 1) {
+      const p = profile.outerPoints[i];
+      const phi = (i / profile.outerPoints.length) * TAU;
+      const cx = p.x * 0.18 * Math.cos(phi);
+      const cy = p.y * 0.18 * Math.sin(phi);
+      const t = (Math.sin(phi * 6 + size * 0.01) + 1) / 2;
+      if (t > 0.74) {
         ctx.beginPath();
-        for (let i = 0; i <= N; i++) {
-            const phi = (i / N) * TAU;
-            const r = superR(phi, m, n1, n2, n3) * scale;
-            const x = r * Math.cos(phi + rot);
-            const y = r * Math.sin(phi + rot);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = color;
+        ctx.fillStyle = profile.palette.inner;
+        ctx.globalAlpha = 0.35 + t * 0.2;
+        ctx.arc(
+          p.x * scale + cx * (scale / 100),
+          p.y * scale + cy * (scale / 100),
+          1.2 + t,
+          0,
+          TAU
+        );
         ctx.fill();
-        ctx.globalAlpha = 1;
+      }
+    }
 
-        ctx.beginPath();
-        ctx.arc(0, 0, 5, 0, TAU);
-        ctx.fillStyle = '#ffd700';
-        ctx.fill();
+    const pulse = 0.14 + 0.12 * ((new Date().getTime() % 900) / 900);
+    const halo = profile.coreRadius * scale * 3.3;
+    const core = profile.haloRadius * scale * 0.92;
+    ctx.beginPath();
+    ctx.arc(0, 0, halo * (1 + pulse), 0, TAU);
+    ctx.strokeStyle = profile.palette.coreGlow;
+    ctx.globalAlpha = 0.32;
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-        ctx.restore();
-    }, [params, color, size]);
+    ctx.beginPath();
+    ctx.arc(0, 0, core, 0, TAU);
+    ctx.fillStyle = profile.palette.core;
+    ctx.globalAlpha = 0.95;
+    ctx.fill();
 
-    return (
-        <canvas 
-            ref={canvasRef} 
-            width={size} 
-            height={size} 
-            style={{ width: size, height: size }} 
-        />
-    );
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }, [params, color, size]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      style={{ width: size, height: size }}
+    />
+  );
 };

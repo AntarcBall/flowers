@@ -6,6 +6,7 @@ import { CONFIG } from '../config';
 import { PersistenceService } from '../modules/PersistenceService';
 import type { FlowerData } from '../modules/PersistenceService';
 import type { StarSelectionData } from '../types';
+import { SELECTED_STAR_SESSION_KEY } from '../types';
 import type { CSSProperties } from 'react';
 import '../App.css';
 
@@ -28,6 +29,7 @@ export default function SpacePage() {
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const handleSelectStar = (data: StarSelectionData) => {
+    sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
     const savedFlowers = PersistenceService.load();
     const { x, y } = makeRandomPosition();
     const newFlower: FlowerData = {

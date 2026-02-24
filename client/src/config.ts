@@ -5,6 +5,14 @@ export const CONFIG = {
     n2: { min: 0.1, max: 8.0 },    // Horizontal shape parameter
     n3: { min: 0.1, max: 8.0 },    // Vertical shape parameter
     rot: { min: 0, max: Math.PI * 2 },
+    petalCount: { min: 4.0, max: 13.0 },
+    petalStretch: { min: 0.45, max: 1.55 },
+    petalCrest: { min: 0.4, max: 1.7 },
+    petalSpread: { min: 0.85, max: 1.35 },
+    coreRadius: { min: 0.10, max: 0.55 },
+    coreGlow: { min: 0.08, max: 1.0 },
+    rimWidth: { min: 0.2, max: 1.0 },
+    outlineWeight: { min: 0.8, max: 2.4 },
   },
   SEEDS: {
     m: { freq: [2.3, 7.1, 13.9], phase: [0.0, 2.1, 4.2] },    // Prime-like frequencies for petal count
@@ -12,10 +20,18 @@ export const CONFIG = {
     n2: { freq: [5.9, 17.3, 23.1], phase: [2.0, 4.1, 6.2] },  // Distinct frequencies for independence
     n3: { freq: [4.1, 13.7, 29.3], phase: [3.0, 5.1, 7.2] },  // Prime-like frequencies for variation
     rot: { freq: [6.7, 15.1, 31.9], phase: [0.5, 2.6, 4.7] }, // High frequencies for rotation
+    petalCount: { freq: [8.3, 12.9, 21.1], phase: [0.1, 2.3, 5.4] },
+    petalStretch: { freq: [1.7, 3.9, 8.1], phase: [2.7, 4.2, 1.6] },
+    petalCrest: { freq: [4.3, 9.7, 18.2], phase: [0.9, 2.9, 6.4] },
+    petalSpread: { freq: [2.4, 6.6, 10.8], phase: [3.5, 5.1, 1.3] },
+    coreRadius: { freq: [5.1, 7.7, 19.1], phase: [1.7, 4.0, 6.8] },
+    coreGlow: { freq: [1.9, 9.4, 22.4], phase: [4.1, 5.5, 0.7] },
+    rimWidth: { freq: [3.2, 6.8, 14.4], phase: [2.1, 5.0, 7.4] },
+    outlineWeight: { freq: [2.8, 11.2, 17.6], phase: [0.7, 3.3, 6.1] },
   },
   
   CUBE_SIZE: 1000,
-  MAX_SPEED: 25, 
+  MAX_SPEED: 25,
   ACCEL_SPEED: 0.05,
   ACCEL_ROT: 0.0002,
   DAMPING_ROT: 0.98,
@@ -28,8 +44,21 @@ export const CONFIG = {
   SCROLL_SPEED: 5.0,
   STORAGE_KEY: 'garden_flowers',
 
-  CONE_ANGLE_THRESHOLD: Math.PI / 7, 
-  TEXT_LOD_DISTANCE: 150, 
+  FLOWER_GROWTH_MS: 700,
+  FLOWER_ANCHOR_Z: 0.9,
+  FLOWER_SHAPE: {
+    segments: { min: 140, max: 420 },
+    innerScale: { min: 0.62, max: 0.9 },
+    outerExtrudeDepth: 0.55,
+    innerExtrudeDepth: 0.32,
+    coreBaseScale: 0.18,
+    corePulse: 0.14,
+    glowSpread: 1.65,
+    lineSmoothingScale: 1,
+  },
+
+  CONE_ANGLE_THRESHOLD: Math.PI / 7,
+  TEXT_LOD_DISTANCE: 150,
   TEXT_MIN_FONT_SIZE: 392,
   TEXT_SIZE_BREAKPOINT: 260,
   TEXT_LINEAR_FONT_SLOPE: 392 / 260,
