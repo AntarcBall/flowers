@@ -42,6 +42,7 @@ export const CONFIG = {
     borderRadius: '4px',
     fontSize: '280px',
     fontWeight: 'bold',
+    fontFamily: 'NanumGothicCustom, sans-serif',
     writingMode: 'horizontal-tb',
     whiteSpace: 'nowrap',
     opacity: 1,

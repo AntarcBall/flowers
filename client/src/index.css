@@ -1,3 +1,10 @@
+@font-face {
+  font-family: 'NanumGothicCustom';
+  src: url('/NANUMGOTHIC.TTF') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
