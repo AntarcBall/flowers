@@ -16,11 +16,18 @@ export class TPSCamera {
     const { CAMERA_OFFSET, CAMERA_LERP_FACTOR, CAMERA_LOOK_TARGET_DIST } = CONFIG;
 
     this.shipForward.set(0, 0, 1).applyQuaternion(spaceship.quaternion);
+    this.lookDir.copy(this.shipForward).normalize();
+
+    if (this.lookDir.lengthSq() <= 0.000001) {
+      this.lookDir.set(0, 0, 1);
+    }
+
+    this.flatForward.copy(this.lookDir);
     this.shipForward.y = 0;
-    if (this.shipForward.lengthSq() < 0.0001) {
+    if (this.flatForward.lengthSq() < 0.0001) {
       this.flatForward.set(0, 0, 1);
     } else {
-      this.flatForward.copy(this.shipForward).normalize();
+      this.flatForward.normalize();
     }
     const yaw = Math.atan2(this.flatForward.x, this.flatForward.z);
     const yawQuat = new Euler(0, yaw, 0);
@@ -28,9 +35,9 @@ export class TPSCamera {
     this.offsetVec.set(CAMERA_OFFSET.x, CAMERA_OFFSET.y, CAMERA_OFFSET.z).applyEuler(yawQuat);
     this.targetPos.copy(spaceship.position).add(this.offsetVec);
 
-    this.targetLook.copy(spaceship.position);
-    this.lookDir.set(0, 0, CAMERA_LOOK_TARGET_DIST).applyEuler(yawQuat);
-    this.targetLook.add(this.lookDir);
+    this.targetLook
+      .copy(spaceship.position)
+      .addScaledVector(this.lookDir, CAMERA_LOOK_TARGET_DIST);
 
     const lag = Math.min(1, CAMERA_LERP_FACTOR * Math.max(delta * 60, 0.0));
 
