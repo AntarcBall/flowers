@@ -155,36 +155,36 @@ export const SpaceScene = ({
       <group ref={shipRef}>
         <mesh position={[0, 0, 1.05]} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
           <coneGeometry args={[0.6, 1.1, 16]} />
-          <meshStandardMaterial color="#ff8f4f" metalness={0.4} roughness={0.25} />
+          <meshStandardMaterial color="#ffffff" metalness={0.8} roughness={0.15} emissive="#ffb35a" emissiveIntensity={0.35} />
         </mesh>
 
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.45, 0.7, 2.4, 24]} />
-          <meshStandardMaterial color="#2b3b4f" metalness={0.8} roughness={0.2} />
+          <meshStandardMaterial color="#2cffea" metalness={0.55} roughness={0.2} emissive="#005f87" emissiveIntensity={0.5} />
         </mesh>
 
         <mesh position={[0, 0, -1.75]} rotation={[-Math.PI / 2, 0, 0]}>
           <coneGeometry args={[0.5, 1.0, 16]} />
-          <meshStandardMaterial color="#141c2a" metalness={0.3} roughness={0.4} />
+          <meshStandardMaterial color="#7b5bff" metalness={0.4} roughness={0.25} emissive="#260033" emissiveIntensity={0.35} />
         </mesh>
 
         <mesh position={[0.9, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
           <boxGeometry args={[1.2, 0.13, 0.25]} />
-          <meshStandardMaterial color="#45586f" metalness={0.7} roughness={0.3} />
+          <meshStandardMaterial color="#ffea00" metalness={0.35} roughness={0.2} emissive="#5a4a00" emissiveIntensity={0.35} />
         </mesh>
         <mesh position={[-0.9, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
           <boxGeometry args={[1.2, 0.13, 0.25]} />
-          <meshStandardMaterial color="#45586f" metalness={0.7} roughness={0.3} />
+          <meshStandardMaterial color="#ffea00" metalness={0.35} roughness={0.2} emissive="#5a4a00" emissiveIntensity={0.35} />
         </mesh>
 
         <mesh position={[0, 0.32, 0]} rotation={[0, Math.PI / 4, 0]}>
           <cylinderGeometry args={[0.09, 0.09, 0.85, 12]} />
-          <meshStandardMaterial color="#4be6ff" emissive="#0d4458" emissiveIntensity={0.6} />
+          <meshStandardMaterial color="#4be6ff" metalness={0.15} roughness={0.2} emissive="#0d4458" emissiveIntensity={0.8} />
         </mesh>
 
         <mesh position={[0, -0.24, 0.1]} rotation={[0, 0, Math.PI]}>
           <sphereGeometry args={[0.22, 16, 16]} />
-          <meshStandardMaterial color="#b0d6ff" metalness={0.2} roughness={0.2} />
+          <meshStandardMaterial color="#f4fdff" metalness={0.25} roughness={0.15} emissive="#103a60" emissiveIntensity={0.4} />
         </mesh>
 
         <axesHelper args={[5]} />
