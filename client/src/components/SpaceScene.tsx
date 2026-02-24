@@ -44,40 +44,57 @@ export const SpaceScene = ({
   const backgroundStarRef = useRef<any>(null);
   const { camera } = useThree();
 
-  const BACKGROUND_STAR_COUNT = 2400;
-  const BACKGROUND_STAR_RADIUS_MIN = 900;
-  const BACKGROUND_STAR_RADIUS_MAX = 1800;
+  const BACKGROUND_CELESTIAL_STAR_COUNT = 1800;
+  const BACKGROUND_GRAIN_STAR_COUNT = 600;
+  const BACKGROUND_STAR_RADIUS_MIN = 1500;
+  const BACKGROUND_STAR_RADIUS_MAX = 2400;
 
   const backgroundStars = useMemo(() => {
-    const total = BACKGROUND_STAR_COUNT * 3;
-    const positions = new Float32Array(total);
-    const colors = new Float32Array(total);
+    const makeShellStars = (
+      count: number,
+      radiusMin: number,
+      radiusMax: number,
+      tint: 'icy' | 'golden',
+    ) => {
+      const total = count * 3;
+      const positions = new Float32Array(total);
+      const colors = new Float32Array(total);
 
-    for (let i = 0; i < BACKGROUND_STAR_COUNT; i++) {
-      const i3 = i * 3;
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
 
-      const u = Math.random() * Math.PI * 2;
-      const v = Math.random() * 2 - 1;
-      const phi = Math.acos(v);
-      const radius =
-        BACKGROUND_STAR_RADIUS_MIN + Math.random() * (BACKGROUND_STAR_RADIUS_MAX - BACKGROUND_STAR_RADIUS_MIN);
+        const theta = Math.random() * Math.PI * 2;
+        const z = Math.random() * 2 - 1;
+        const sinPhi = Math.sqrt(1 - Math.min(1, z * z));
+        const radius = radiusMin + Math.pow(Math.random(), 1.2) * (radiusMax - radiusMin);
 
-      const sinPhi = Math.sin(phi);
-      const x = radius * sinPhi * Math.cos(u);
-      const y = radius * Math.cos(phi);
-      const z = radius * sinPhi * Math.sin(u);
+        const x = radius * sinPhi * Math.cos(theta);
+        const y = radius * z;
+        const w = radius * sinPhi * Math.sin(theta);
 
-      positions[i3] = x;
-      positions[i3 + 1] = y;
-      positions[i3 + 2] = z;
+        positions[i3] = x;
+        positions[i3 + 1] = y;
+        positions[i3 + 2] = w;
 
-      const glow = 0.55 + Math.random() * 0.45;
-      colors[i3] = 0.75 + glow * 0.25;
-      colors[i3 + 1] = 0.85 + glow * 0.15;
-      colors[i3 + 2] = 1.0;
-    }
+        const glow = 0.45 + Math.random() * 0.55;
+        if (tint === 'icy') {
+          colors[i3] = 0.62 + glow * 0.28;
+          colors[i3 + 1] = 0.75 + glow * 0.2;
+          colors[i3 + 2] = 0.95 + glow * 0.05;
+        } else {
+          colors[i3] = 0.9 + glow * 0.08;
+          colors[i3 + 1] = 0.82 + glow * 0.15;
+          colors[i3 + 2] = 0.75 + glow * 0.2;
+        }
+      }
 
-    return { positions, colors, count: BACKGROUND_STAR_COUNT };
+      return { positions, colors };
+    };
+
+    return {
+      celestial: makeShellStars(BACKGROUND_CELESTIAL_STAR_COUNT, BACKGROUND_STAR_RADIUS_MIN, BACKGROUND_STAR_RADIUS_MAX, 'icy'),
+      grain: makeShellStars(BACKGROUND_GRAIN_STAR_COUNT, BACKGROUND_STAR_RADIUS_MIN * 0.8, BACKGROUND_STAR_RADIUS_MAX * 0.8, 'golden'),
+    };
   }, []);
 
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
@@ -293,27 +310,51 @@ export const SpaceScene = ({
         )}
       </group>
 
-      <points ref={backgroundStarRef} frustumCulled={false}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes.position"
-            args={[backgroundStars.positions, 3]}
+      <group ref={backgroundStarRef} frustumCulled={false}>
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes.position"
+              args={[backgroundStars.celestial.positions, 3]}
+            />
+            <bufferAttribute
+              attach="attributes.color"
+              args={[backgroundStars.celestial.colors, 3]}
+            />
+          </bufferGeometry>
+          <pointsMaterial
+            size={1.7}
+            sizeAttenuation
+            vertexColors
+            transparent
+            depthWrite={false}
+            blending={AdditiveBlending}
+            opacity={0.75}
           />
-          <bufferAttribute
-            attach="attributes.color"
-            args={[backgroundStars.colors, 3]}
+        </points>
+
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes.position"
+              args={[backgroundStars.grain.positions, 3]}
+            />
+            <bufferAttribute
+              attach="attributes.color"
+              args={[backgroundStars.grain.colors, 3]}
+            />
+          </bufferGeometry>
+          <pointsMaterial
+            size={2.8}
+            sizeAttenuation
+            vertexColors
+            transparent
+            depthWrite={false}
+            blending={AdditiveBlending}
+            opacity={0.92}
           />
-        </bufferGeometry>
-        <pointsMaterial
-          size={2.4}
-          sizeAttenuation
-          vertexColors
-          transparent
-          depthWrite={false}
-          blending={AdditiveBlending}
-          opacity={0.9}
-        />
-      </points>
+        </points>
+      </group>
 
       {stars.map((star) => {
           const isAimed = star.id === aimedStarId;
