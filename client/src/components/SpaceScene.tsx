@@ -227,7 +227,6 @@ export const SpaceScene = ({
           <meshStandardMaterial color="#f4fdff" metalness={0.25} roughness={0.15} emissive="#103a60" emissiveIntensity={0.4} />
         </mesh>
 
-        <axesHelper args={[5]} />
 
         {debugMode && (
           <mesh position={[0, 0, coneHeight / 2]} rotation={[-Math.PI / 2, 0, 0]}>
