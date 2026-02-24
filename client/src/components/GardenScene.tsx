@@ -49,24 +49,33 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => 
            <ambientLight />
            
            <Html position={[0,0,0]} fullscreen style={{ pointerEvents: 'none' }}>
-               <div style={{
-                   position: 'absolute',
-                   bottom: '20px',
-                   right: '20px',
-                   width: '15vh',
-                   height: '15vh',
-                   background: 'rgba(255, 255, 255, 0.8)',
-                   border: '2px solid black',
-                   pointerEvents: 'auto',
-                   display: 'flex',
-                   alignItems: 'center',
-                   justifyContent: 'center',
-                   flexDirection: 'column'
-               }}>
-                   <div style={{ fontSize: '10px' }}>Preview</div>
-                   <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{selectedStarData.word}</div>
-                   <div style={{ width: '40px', height: '40px', background: selectedStarData.color, borderRadius: '50%', margin: '5px' }}></div>
-               </div>
+                <div style={{
+                    position: 'absolute',
+                    bottom: '20px',
+                    right: '20px',
+                    width: '15vh',
+                    height: '15vh',
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    border: 'none',
+                    pointerEvents: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    boxShadow: '0 0 12px rgba(255, 255, 255, 0.45)',
+                    color: 'white',
+                    overflow: 'hidden',
+                }}>
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: selectedStarData.color,
+                        opacity: 0.35,
+                    }} />
+                    <div style={{ fontSize: '10px' }}>Preview</div>
+                    <div style={{ position: 'relative', fontSize: '14px', fontWeight: 'bold' }}>{selectedStarData.word}</div>
+                    <div style={{ position: 'relative', width: '40px', height: '40px', background: selectedStarData.color, borderRadius: '50%', margin: '5px', border: '2px solid rgba(255,255,255,0.8)' }}></div>
+                </div>
            </Html>
         </>
     );

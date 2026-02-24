@@ -53,8 +53,10 @@ export const FlowerPreview = ({
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = color.replace('hsl', 'hsla').replace(')', ', 0.3)'); 
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = color;
         ctx.fill();
+        ctx.globalAlpha = 1;
 
         ctx.beginPath();
         ctx.arc(0, 0, 5, 0, TAU);

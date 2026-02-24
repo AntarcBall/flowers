@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Vector3 } from 'three';
+import { Vector3, Shape, DoubleSide } from 'three';
 
 const TAU = Math.PI * 2;
 
@@ -39,15 +39,33 @@ export const Flower = ({
         return pts;
     }, [params]);
 
+    const shape = useMemo(() => {
+        if (points.length < 3) return null;
+
+        const path = new Shape();
+        const [firstPoint, ...restPoints] = points;
+        if (!firstPoint) return null;
+
+        path.moveTo(firstPoint.x, firstPoint.y);
+        for (const point of restPoints) {
+            path.lineTo(point.x, point.y);
+        }
+        return path;
+    }, [points]);
+
     return (
         <group scale={[scale, scale, scale]}>
+            {shape && (
+                <mesh>
+                    <shapeGeometry args={[shape]} />
+                    <meshBasicMaterial color={color} transparent opacity={0.28} side={DoubleSide} />
+                </mesh>
+            )}
+            
              <line>
                 <bufferGeometry>
                     <bufferAttribute 
-                        attach="attributes-position" 
-                        count={points.length} 
-                        array={new Float32Array(points.flatMap(p => [p.x, p.y, p.z]))} 
-                        itemSize={3} 
+                        attach="attributes-position"
                         args={[new Float32Array(points.flatMap(p => [p.x, p.y, p.z])), 3]}
                     />
                 </bufferGeometry>
