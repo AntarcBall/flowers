@@ -88,9 +88,9 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: StarSelect
                   style={{
                     pointerEvents: 'none',
                     whiteSpace: 'nowrap',
-                    padding: '45px 130px',
+                    padding: '67.5px 195px',
                     borderRadius: 999,
-                    fontSize: 180,
+                    fontSize: 270,
                     color: 'rgba(234, 247, 255, 0.95)',
                     background: 'linear-gradient(115deg, rgba(3, 12, 34, 0.78), rgba(9, 28, 57, 0.72))',
                     border: '1px solid rgba(156, 214, 255, 0.45)',

@@ -13,6 +13,7 @@ const LABEL_FLAT_GAP = 8;
 const LABEL_TRIES_PER_RING = 26;
 const LABEL_RING_FACTORS = [1.03, 1.08, 1.15, 1.24, 1.34];
 const LABEL_TEXT_PADDING = 4;
+const LABEL_ORBIT_SCALE = 0.6;
 
 export class GardenManager {
   flowers: FlowerData[] = [];
@@ -101,7 +102,8 @@ export class GardenManager {
     placed: FlowerData[],
   ) {
     const startAngle = this.toLabelPlacementSeed(x, y);
-    const outerRadius = FLOWER_VISUAL_RADIUS + FLOWER_LABEL_GROWTH_MARGIN + LABEL_FLAT_GAP + LABEL_TEXT_PADDING;
+    const outerRadius =
+      (FLOWER_VISUAL_RADIUS + FLOWER_LABEL_GROWTH_MARGIN + LABEL_FLAT_GAP + LABEL_TEXT_PADDING) * LABEL_ORBIT_SCALE;
 
     for (const ringFactor of LABEL_RING_FACTORS) {
       const radius = outerRadius * ringFactor;
