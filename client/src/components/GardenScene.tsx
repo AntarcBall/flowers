@@ -34,10 +34,11 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => 
     return (
         <>
            <OrthographicCamera makeDefault position={[CONFIG.GARDEN_SIZE/2, CONFIG.GARDEN_SIZE/2, 100]} zoom={1} near={0.1} far={1000} />
+           <color attach="background" args={['black']} />
            
            <mesh position={[CONFIG.GARDEN_SIZE/2, CONFIG.GARDEN_SIZE/2, 0]} onClick={handlePlant}>
                <planeGeometry args={[CONFIG.GARDEN_SIZE, CONFIG.GARDEN_SIZE]} />
-               <meshBasicMaterial color="white" />
+               <meshBasicMaterial color="black" />
            </mesh>
 
            {flowers.map(f => (
