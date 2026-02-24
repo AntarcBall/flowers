@@ -43,7 +43,7 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => 
 
            {flowers.map(f => (
                <group key={f.id} position={[f.x, f.y, 1]}>
-                   <Flower params={f.params as any} color={f.color} scale={10} />
+                   <Flower params={f.params as any} color={f.color} scale={13} />
                </group>
            ))}
            
