@@ -8,8 +8,12 @@ export interface FlowerData {
   y: number;
   color: string;
   params: FlowerRenderParams;
+  word: string;
   timestamp: number;
   plantedAt?: number;
+  labelOffsetX?: number;
+  labelOffsetY?: number;
+  labelRadius?: number;
 }
 
 function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
@@ -17,9 +21,23 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
     return null;
   }
 
-  const anyRaw = raw as Partial<FlowerData> & { x?: unknown; y?: unknown; color?: unknown; id?: unknown; params?: unknown; timestamp?: unknown; plantedAt?: unknown };
+  const anyRaw = raw as Partial<FlowerData> & {
+    x?: unknown;
+    y?: unknown;
+    color?: unknown;
+    id?: unknown;
+    params?: unknown;
+    timestamp?: unknown;
+    plantedAt?: unknown;
+    word?: unknown;
+    labelOffsetX?: unknown;
+    labelOffsetY?: unknown;
+    labelRadius?: unknown;
+  };
 
   const color = typeof anyRaw.color === 'string' && anyRaw.color.trim() ? anyRaw.color : '#f2f6ff';
+  const word =
+    typeof anyRaw.word === 'string' && anyRaw.word.trim() ? anyRaw.word : 'Unknown Bloom';
 
   const x = Number(anyRaw.x);
   const y = Number(anyRaw.y);
@@ -33,6 +51,9 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
   const now = Date.now();
   const baseTimestamp = Number(anyRaw.timestamp);
   const plantedAt = Number(anyRaw.plantedAt);
+  const labelOffsetX = Number(anyRaw.labelOffsetX);
+  const labelOffsetY = Number(anyRaw.labelOffsetY);
+  const labelRadius = Number(anyRaw.labelRadius);
 
   const clampedX = Math.max(0, Math.min(CONFIG.GARDEN_SIZE, Number.isFinite(x) ? x : 0));
   const clampedY = Math.max(0, Math.min(CONFIG.GARDEN_SIZE, Number.isFinite(y) ? y : 0));
@@ -42,9 +63,13 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
     x: clampedX,
     y: clampedY,
     color,
+    word,
     params,
     timestamp: Number.isFinite(baseTimestamp) ? baseTimestamp : now,
     plantedAt: Number.isFinite(plantedAt) ? plantedAt : now,
+    labelOffsetX: Number.isFinite(labelOffsetX) ? labelOffsetX : undefined,
+    labelOffsetY: Number.isFinite(labelOffsetY) ? labelOffsetY : undefined,
+    labelRadius: Number.isFinite(labelRadius) ? labelRadius : undefined,
   };
 }
 

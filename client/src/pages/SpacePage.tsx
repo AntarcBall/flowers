@@ -38,6 +38,7 @@ export default function SpacePage() {
       y,
       color: data.color,
       params: data.params,
+      word: data.word,
       timestamp: Date.now(),
     };
 

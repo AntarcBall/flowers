@@ -76,9 +76,34 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: StarSelect
       {flowers.map((flower: FlowerData) => {
         const plantedAt = flower.plantedAt ?? flower.timestamp;
         const progress = Math.min(1, Math.max(0, (Date.now() - plantedAt) / CONFIG.FLOWER_GROWTH_MS));
+        const labelOffsetX = flower.labelOffsetX ?? 0;
+        const labelOffsetY = flower.labelOffsetY ?? 0;
+
         return (
           <group key={flower.id} position={[flower.x, flower.y, CONFIG.FLOWER_ANCHOR_Z]}>
             <Flower params={flower.params} color={flower.color} scale={104} growth={progress} />
+            {flower.word && (
+              <Html position={[labelOffsetX, labelOffsetY, 0.35]} center distanceFactor={22} transform>
+                <div
+                  style={{
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                    padding: '3px 8px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    color: 'rgba(234, 247, 255, 0.95)',
+                    background: 'linear-gradient(115deg, rgba(3, 12, 34, 0.78), rgba(9, 28, 57, 0.72))',
+                    border: '1px solid rgba(156, 214, 255, 0.45)',
+                    boxShadow: '0 2px 10px rgba(2, 12, 32, 0.5)',
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    letterSpacing: 0.25,
+                    backdropFilter: 'blur(1.5px)',
+                  }}
+                >
+                  {flower.word}
+                </div>
+              </Html>
+            )}
           </group>
         );
       })}
