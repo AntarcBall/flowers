@@ -6,7 +6,6 @@ export class SpaceshipController {
   quaternion = new Quaternion();
   speed = 0;
   angularVelocity = { pitch: 0, yaw: 0 };
-  private speedDecayTimer = 0;
 
   update(deltaTime: number, inputState: Record<string, boolean>): boolean {
     const { MAX_SPEED, ACCEL_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
@@ -16,14 +15,11 @@ export class SpaceshipController {
     if (inputState['e'] || inputState['E']) this.speed -= ACCEL_SPEED;
     this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
 
-    if (isThrottleInput) {
-      this.speedDecayTimer = 0;
-    } else {
-      this.speedDecayTimer += deltaTime;
-      while (this.speedDecayTimer >= 5) {
-        this.speed *= 0.9;
-        this.speedDecayTimer -= 5;
-      }
+    if (!isThrottleInput) {
+      const DECAY_PER_5S = 0.9;
+      const DECAY_SECONDS = 5;
+      const decayFactor = Math.pow(DECAY_PER_5S, deltaTime / DECAY_SECONDS);
+      this.speed *= decayFactor;
       this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
     }
 
