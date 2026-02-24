@@ -1,6 +1,6 @@
 export const CONFIG = {
   FLOWER_RANGES: {
-    m: { min: 3.0, max: 16.0 },    // Petal count (more meaningful range)
+    m: { min: 2.0, max: 24.0 },    // Superformula base frequency
     n1: { min: 0.1, max: 8.0 },    // Overall shape parameter
     n2: { min: 0.1, max: 8.0 },    // Horizontal shape parameter
     n3: { min: 0.1, max: 8.0 },    // Vertical shape parameter
@@ -13,6 +13,15 @@ export const CONFIG = {
     coreGlow: { min: 0.08, max: 1.0 },
     rimWidth: { min: 0.2, max: 1.0 },
     outlineWeight: { min: 0.8, max: 2.4 },
+    symmetry: { min: 3.0, max: 20.0 },
+    mandalaDepth: { min: 0.0, max: 1.0 },
+    ringBands: { min: 1.0, max: 8.0 },
+    radialTwist: { min: 0.0, max: 1.8 },
+    innerVoid: { min: 0.0, max: 0.72 },
+    fractalIntensity: { min: 0.0, max: 2.2 },
+    sectorWarp: { min: 0.0, max: 1.2 },
+    ringContrast: { min: 0.0, max: 1.0 },
+    depthEcho: { min: 0.0, max: 1.0 },
   },
   SEEDS: {
     m: { freq: [2.3, 7.1, 13.9], phase: [0.0, 2.1, 4.2] },    // Prime-like frequencies for petal count
@@ -28,6 +37,15 @@ export const CONFIG = {
     coreGlow: { freq: [1.9, 9.4, 22.4], phase: [4.1, 5.5, 0.7] },
     rimWidth: { freq: [3.2, 6.8, 14.4], phase: [2.1, 5.0, 7.4] },
     outlineWeight: { freq: [2.8, 11.2, 17.6], phase: [0.7, 3.3, 6.1] },
+    symmetry: { freq: [2.9, 7.7, 15.4], phase: [1.1, 3.2, 5.8] },
+    mandalaDepth: { freq: [3.1, 10.2, 22.3], phase: [0.6, 4.1, 7.9] },
+    ringBands: { freq: [1.7, 6.6, 13.2], phase: [2.3, 5.0, 1.4] },
+    radialTwist: { freq: [4.9, 8.3, 19.1], phase: [0.9, 3.4, 5.5] },
+    innerVoid: { freq: [2.2, 9.6, 24.7], phase: [3.1, 5.7, 0.8] },
+    fractalIntensity: { freq: [1.8, 14.9, 26.1], phase: [4.4, 6.6, 1.2] },
+    sectorWarp: { freq: [6.2, 16.9, 28.8], phase: [1.5, 4.4, 0.7] },
+    ringContrast: { freq: [3.9, 11.4, 21.7], phase: [0.8, 5.5, 7.2] },
+    depthEcho: { freq: [4.8, 13.6, 23.4], phase: [2.2, 4.7, 6.1] },
   },
   
   CUBE_SIZE: 1000,
@@ -48,7 +66,7 @@ export const CONFIG = {
   FLOWER_ANCHOR_Z: 0.9,
   FLOWER_SHAPE: {
     segments: { min: 140, max: 420 },
-    innerScale: { min: 0.62, max: 0.9 },
+    innerScale: { min: 0.44, max: 0.96 },
     outerExtrudeDepth: 0.55,
     innerExtrudeDepth: 0.32,
     coreBaseScale: 0.18,

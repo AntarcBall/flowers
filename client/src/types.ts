@@ -12,6 +12,15 @@ export type FlowerRenderParams = {
   coreGlow?: number;
   rimWidth?: number;
   outlineWeight?: number;
+  symmetry?: number;
+  mandalaDepth?: number;
+  ringBands?: number;
+  radialTwist?: number;
+  innerVoid?: number;
+  fractalIntensity?: number;
+  sectorWarp?: number;
+  ringContrast?: number;
+  depthEcho?: number;
 };
 
 export type StarSelectionData = {
