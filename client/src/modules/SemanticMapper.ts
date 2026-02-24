@@ -13,6 +13,21 @@ function toSeed(key: keyof FlowerRenderParams, x: number, y: number, z: number) 
   return clamp01((signal + 3) / 6);
 }
 
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+const COLOR_LUMINANCE = {
+  min: 34,
+  max: 88,
+  floor: 34,
+};
+
+const COLOR_SATURATION = {
+  min: 44,
+  max: 92,
+};
+
 export class SemanticMapper {
   static mapCoordinatesToParams(x: number, y: number, z: number) {
     const L = CONFIG.CUBE_SIZE;
@@ -69,11 +84,22 @@ export class SemanticMapper {
     const satSeed = toSeed('petalCrest', normalizedZ, normalizedX, normalizedY);
     const lumSeed = toSeed('coreGlow', normalizedX, normalizedY, normalizedZ);
     const glowSeed = toSeed('fractalIntensity', normalizedY, normalizedX, normalizedZ);
+    const ringContrastSeed = toSeed('ringContrast', normalizedY, normalizedZ, normalizedX);
+    const depthEchoSeed = toSeed('depthEcho', normalizedX, normalizedY, normalizedZ);
 
     const hue = Math.round((hueSeedA * 300 + hueSeedB * 120) % 360);
-    const sat = Math.round(42 + satSeed * 44 + glowSeed * 12);
-    const lum = Math.round(28 + lumSeed * 30 + satSeed * 12 + glowSeed * 10);
+    const visibilityGate = clamp01(
+      0.34 * satSeed + 0.22 * glowSeed + 0.16 * lumSeed + 0.14 * ringContrastSeed + 0.14 * depthEchoSeed
+    );
+    const satBase = lerp(COLOR_SATURATION.min, COLOR_SATURATION.max, visibilityGate);
+    const satShift = 2 * Math.sin((hueSeedA + hueSeedB) * Math.PI);
+    const sat = Math.round(
+      Math.max(COLOR_SATURATION.min, Math.min(COLOR_SATURATION.max, satBase + satShift)),
+    );
+    const lum = Math.round(
+      lerp(COLOR_LUMINANCE.min, COLOR_LUMINANCE.max, visibilityGate)
+    );
 
-    return `hsl(${hue}, ${sat}%, ${Math.max(16, Math.min(88, lum))}%)`;
+    return `hsl(${hue}, ${sat}%, ${Math.max(COLOR_LUMINANCE.floor, Math.min(COLOR_LUMINANCE.max, lum))}%)`;
   }
 }
