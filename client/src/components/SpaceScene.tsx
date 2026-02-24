@@ -14,6 +14,18 @@ type Telemetry = {
   position: { x: number; y: number; z: number };
 };
 
+type LaunchEffect = {
+  id: string;
+  target: Vector3;
+  start: Vector3;
+  elapsed: number;
+  duration: number;
+};
+
+const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
+
 export const SpaceScene = ({
   onSelectStar,
   debugMode,
@@ -30,7 +42,7 @@ export const SpaceScene = ({
   const inputRef = useInput();
   const shipRef = useRef<Group>(null);
   const backgroundStarRef = useRef<any>(null);
-  const { camera, gl } = useThree();
+  const { camera } = useThree();
 
   const BACKGROUND_STAR_COUNT = 2400;
   const BACKGROUND_STAR_RADIUS_MIN = 900;
@@ -74,6 +86,7 @@ export const SpaceScene = ({
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
   const labelVisibleKeyRef = useRef('');
   const MAX_VISIBLE_LABELS = 12;
+  const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
   
   const [stars, setStars] = useState<any[]>([]);
   const starsRef = useRef<any[]>([]);
@@ -162,23 +175,67 @@ export const SpaceScene = ({
   });
 
   useEffect(() => {
-      const handleClick = () => {
+      const selectAimedStar = () => {
           const currentAimedId = aimedStarRef.current;
-          if (currentAimedId !== null) {
-              const star = starsRef.current.find(s => s.id === currentAimedId);
-              if (star) {
-                  const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-                  onSelectStar({ color: star.color, params, word: star.word });
+          if (currentAimedId === null) return;
+
+          const star = starsRef.current.find(s => s.id === currentAimedId);
+          if (!star) return;
+
+          const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
+          onSelectStar({ color: star.color, params, word: star.word });
+          setLaunchEffects((prev) => [
+              ...prev.slice(-6),
+              {
+                  id: makeLaunchId(),
+                  start: new Vector3().copy(controller.position),
+                  target: new Vector3().copy(star.position),
+                  elapsed: 0,
+                  duration: 1.45
               }
-          }
+          ]);
       };
 
-      const canvas = gl.domElement;
-      canvas.addEventListener('click', handleClick);
-      return () => {
-          canvas.removeEventListener('click', handleClick);
+      const handleKeyDown = (event: KeyboardEvent) => {
+          if (event.code !== 'Space' && event.key !== ' ') return;
+          if (event.repeat) return;
+          event.preventDefault();
+          selectAimedStar();
       };
-  }, [gl.domElement, onSelectStar]); 
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+      };
+  }, [onSelectStar, controller]);
+
+  useFrame((_, delta) => {
+    if (launchEffects.length === 0) return;
+
+    setLaunchEffects((currentEffects) =>
+      currentEffects
+        .map((effect) => {
+          const nextElapsed = effect.elapsed + delta;
+          if (nextElapsed >= effect.duration) return null;
+          return { ...effect, elapsed: nextElapsed };
+        })
+        .filter((effect): effect is LaunchEffect => effect !== null)
+    );
+  });
+
+  const getLaunchPosition = (effect: LaunchEffect): Vector3 => {
+      const progress = clamp01(effect.elapsed / effect.duration);
+      const outboundRatio = 0.55;
+      const shipPosition = shipRef.current?.position ?? new Vector3();
+
+      if (progress <= outboundRatio) {
+          const segmentT = easeOutCubic(clamp01(progress / outboundRatio));
+          return effect.start.clone().lerp(effect.target, segmentT);
+      }
+
+      const segmentT = easeOutCubic(clamp01((progress - outboundRatio) / (1 - outboundRatio)));
+      return effect.target.clone().lerp(shipPosition, segmentT);
+  };
 
   const coneHeight = 50 * 14;
   const coneRadius = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * coneHeight;
@@ -278,15 +335,27 @@ export const SpaceScene = ({
                     </mesh>
                 )}
 
-                {showText && (
-                    <Html distanceFactor={10}>
-                        <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
-                            {star.word}
-                        </div>
-                    </Html>
-                )}
-            </group>
-          );
+        {showText && (
+          <Html distanceFactor={10}>
+            <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
+              {star.word}
+            </div>
+          </Html>
+        )}
+      </group>
+    );
+      })}
+
+      {launchEffects.map((effect) => {
+        const position = getLaunchPosition(effect);
+        return (
+          <group key={effect.id} position={position.toArray()}>
+            <mesh>
+              <sphereGeometry args={[0.16, 12, 12]} />
+              <meshStandardMaterial color="#ffef5f" emissive="#ffef5f" emissiveIntensity={1} />
+            </mesh>
+          </group>
+        );
       })}
       
       <gridHelper args={[2000, 20]} />

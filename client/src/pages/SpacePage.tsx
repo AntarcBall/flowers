@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { FlowerPreview } from '../components/FlowerPreview';
 import { SpaceScene } from '../components/SpaceScene';
@@ -16,6 +16,8 @@ export default function SpacePage() {
     speed: 0,
     position: { x: 0, y: 0, z: 0 },
   });
+  const [toastQueue, setToastQueue] = useState<{ id: string; word: string }[]>([]);
+  const toastTimersRef = useRef(new Map<string, number>());
   const makeRandomPosition = () => ({
     x: Math.random() * CONFIG.GARDEN_SIZE,
     y: Math.random() * CONFIG.GARDEN_SIZE,
@@ -39,7 +41,22 @@ export default function SpacePage() {
 
     savedFlowers.push(newFlower);
     PersistenceService.save(savedFlowers);
+
+    const toastId = makeFlowerId();
+    setToastQueue((current) => [...current, { id: toastId, word: data.word }]);
+    const timerId = window.setTimeout(() => {
+      setToastQueue((current) => current.filter((entry) => entry.id !== toastId));
+      toastTimersRef.current.delete(toastId);
+    }, 2800);
+    toastTimersRef.current.set(toastId, timerId);
   };
+
+  useEffect(() => {
+    return () => {
+      toastTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      toastTimersRef.current.clear();
+    };
+  }, []);
 
   const speedRatio = Math.max(0, Math.min(1, telemetry.speed / CONFIG.MAX_SPEED));
   const speedAngle = speedRatio * 180;
@@ -73,7 +90,26 @@ export default function SpacePage() {
       >
         <div style={{ position: 'absolute', top: 20, left: 20, color: 'white' }}>
           <p>WASD to Rotate, QE to Speed up/down.</p>
-          <p>Aim at a star and Click to select.</p>
+          <p>Aim at a star and press Space to plant.</p>
+        </div>
+
+        <div style={{ position: 'absolute', top: 56, left: 20, color: 'white', display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' }}>
+          {toastQueue.map((toast) => (
+            <div
+              key={toast.id}
+              style={{
+                minWidth: 220,
+                padding: '8px 10px',
+                border: '1px solid rgba(255, 255, 255, 0.65)',
+                borderRadius: '8px',
+                background: 'rgba(12, 20, 42, 0.75)',
+                fontSize: 12,
+                boxShadow: '0 0 12px rgba(0, 0, 0, 0.35)',
+              }}
+            >
+              {toast.word} - 새로운 꽃이 심겨졌습니다
+            </div>
+          ))}
         </div>
 
         <div
