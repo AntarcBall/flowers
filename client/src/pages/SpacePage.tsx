@@ -3,7 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import { FlowerPreview } from '../components/FlowerPreview';
 import { SpaceScene } from '../components/SpaceScene';
 import { CONFIG } from '../config';
-import { SELECTED_STAR_SESSION_KEY } from '../types';
+import { PersistenceService } from '../modules/PersistenceService';
+import type { FlowerData } from '../modules/PersistenceService';
 import type { StarSelectionData } from '../types';
 import type { CSSProperties } from 'react';
 import '../App.css';
@@ -15,10 +16,29 @@ export default function SpacePage() {
     speed: 0,
     position: { x: 0, y: 0, z: 0 },
   });
+  const makeRandomPosition = () => ({
+    x: Math.random() * CONFIG.GARDEN_SIZE,
+    y: Math.random() * CONFIG.GARDEN_SIZE,
+  });
+  const makeFlowerId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? (crypto as Crypto).randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const handleSelectStar = (data: StarSelectionData) => {
-    sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
-    window.location.href = '/garden.html';
+    const savedFlowers = PersistenceService.load();
+    const { x, y } = makeRandomPosition();
+    const newFlower: FlowerData = {
+      id: makeFlowerId(),
+      x,
+      y,
+      color: data.color,
+      params: data.params,
+      timestamp: Date.now(),
+    };
+
+    savedFlowers.push(newFlower);
+    PersistenceService.save(savedFlowers);
   };
 
   const speedRatio = Math.max(0, Math.min(1, telemetry.speed / CONFIG.MAX_SPEED));
