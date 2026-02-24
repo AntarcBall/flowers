@@ -25,6 +25,10 @@ export default function SpacePage() {
   const speedAngle = speedRatio * 180;
   const speedNeedleDeg = speedAngle - 90;
   const speedReadoutDeg = 180 - Math.round(speedAngle);
+  const formatCoordinate = (value: number) => {
+    const trunc = Math.trunc(value * 100) / 100;
+    return trunc.toFixed(2);
+  };
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
@@ -141,7 +145,7 @@ export default function SpacePage() {
             style={{
               ...(CONFIG.PREVIEW as CSSProperties),
               width: 220,
-              height: 150,
+              height: 190,
               color: 'white',
               padding: '8px 10px',
               boxSizing: 'border-box',
@@ -150,9 +154,9 @@ export default function SpacePage() {
           >
             <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Current Position</div>
             <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}>
-              <div>X: {telemetry.position.x.toFixed(2)}</div>
-              <div>Y: {telemetry.position.y.toFixed(2)}</div>
-              <div>Z: {telemetry.position.z.toFixed(2)}</div>
+              <div>X: {formatCoordinate(telemetry.position.x)}</div>
+              <div>Y: {formatCoordinate(telemetry.position.y)}</div>
+              <div>Z: {formatCoordinate(telemetry.position.z)}</div>
             </div>
           </div>
         </div>
