@@ -93,7 +93,7 @@ export function normalizeSpacePerformanceSettings(
     )),
     maxVisibleLabels: Math.round(clamp(
       input.maxVisibleLabels ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.maxVisibleLabels,
-      2,
+      0,
       20,
     )),
     labelUpdateIntervalMs: Math.round(clamp(

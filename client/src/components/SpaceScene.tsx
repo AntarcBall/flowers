@@ -109,7 +109,8 @@ export const SpaceScene = ({
   const settings = performance ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS;
   const density = Math.max(0.2, Math.min(1, settings.backgroundStarDensity));
   const sampleStep = Math.max(1, Math.round(settings.aimSampleStep || 1));
-  const maxVisibleLabels = Math.max(2, Math.min(20, Math.round(settings.maxVisibleLabels || 8)));
+  const maxVisibleLabels = Math.max(0, Math.min(20, Math.round(settings.maxVisibleLabels || 0)));
+  const labelsEnabled = maxVisibleLabels > 0;
   const labelBudgetSeconds = Math.max(0.024, Math.min(0.22, (settings.labelUpdateIntervalMs || 55) / 1000));
   const labelConeScale = Math.max(0.55, Math.min(1.35, settings.labelConeScale || 0.9));
   const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * labelConeScale;
@@ -239,7 +240,7 @@ export const SpaceScene = ({
       telemetryAccumRef.current = 0;
     }
 
-    const candidates: AimCandidate[] = [];
+    const candidates: AimCandidate[] = labelsEnabled ? [] : [];
     let bestTargetId: number | null = null;
     let bestDist = Infinity;
     let bestTargetDist = Infinity;
@@ -260,22 +261,29 @@ export const SpaceScene = ({
         bestTargetDist = dist;
       }
 
-      if (dist <= labelConeLength && dot > labelConeCos) {
+      if (labelsEnabled && dist <= labelConeLength && dot > labelConeCos) {
         insertCandidate(candidates, { id: star.id, dot, dist }, maxVisibleLabels);
       }
     }
 
-    const visibleIds = candidates.map((candidate) => candidate.id);
-    const visibleKey = visibleIds.join(',');
-
-    if (labelUpdateAccumRef.current >= labelBudgetSeconds) {
-      if (visibleKey !== labelVisibleKeyRef.current) {
-        setLabelVisibleStarIds(new Set(visibleIds));
-        labelVisibleKeyRef.current = visibleKey;
+    if (labelsEnabled) {
+      const visibleIds = candidates.map((candidate) => candidate.id);
+      const visibleKey = visibleIds.join(',');
+      if (labelUpdateAccumRef.current >= labelBudgetSeconds) {
+        if (visibleKey !== labelVisibleKeyRef.current) {
+          setLabelVisibleStarIds(new Set(visibleIds));
+          labelVisibleKeyRef.current = visibleKey;
+        }
+        labelUpdateAccumRef.current = 0;
+      } else {
+        labelUpdateAccumRef.current += delta;
+      }
+    } else {
+      if (labelVisibleKeyRef.current !== '') {
+        setLabelVisibleStarIds(new Set());
+        labelVisibleKeyRef.current = '';
       }
       labelUpdateAccumRef.current = 0;
-    } else {
-      labelUpdateAccumRef.current += delta;
     }
 
     if (bestTargetId !== aimedStarRef.current) {
