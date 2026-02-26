@@ -12,6 +12,8 @@ import { CONFIG } from '../config';
 type Telemetry = {
   speed: number;
   position: { x: number; y: number; z: number };
+  headingDeg?: number;
+  pitchDeg?: number;
 };
 
 type LaunchEffect = {
@@ -26,6 +28,15 @@ type AimCandidate = {
   id: number;
   dot: number;
   dist: number;
+};
+
+type AimPayload = {
+  id?: number;
+  word: string;
+  color: string;
+  params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+  distance?: number;
+  headingOffsetDeg?: number;
 };
 
 type SpaceStar = {
@@ -91,7 +102,7 @@ export const SpaceScene = ({
 }: {
   onSelectStar: (data: any) => void;
   debugMode: boolean;
-  onAimChange: (data: any) => void;
+  onAimChange: (data: AimPayload | null) => void;
   onTelemetryChange: (data: Telemetry) => void;
   performance?: SpacePerformanceSettings;
 }) => {
@@ -111,6 +122,15 @@ export const SpaceScene = ({
   const showGrid = (settings.gridDensity || 1) >= 0.4;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
   const labelFontSize = Math.max(10, Math.round(12 + (labelConeScale - 0.55) * 12));
+
+  const toHeadingDeg = (vector: Vector3) => {
+    const rawDeg = (Math.atan2(vector.x, vector.z) * 180) / Math.PI;
+    return (rawDeg + 360) % 360;
+  };
+
+  const toPitchDeg = (vector: Vector3) => {
+    return (Math.asin(Math.max(-1, Math.min(1, vector.y))) * 180) / Math.PI;
+  };
 
   const controller = useMemo(() => new SpaceshipController(), []);
   const tpsCamera = useMemo(() => new TPSCamera(), []);
@@ -200,9 +220,12 @@ export const SpaceScene = ({
       backgroundStarRef.current.position.copy(camera.position);
     }
     tpsCamera.update(camera as PerspectiveCamera, controller, delta);
+    const forward = controller.getForwardVector();
 
     telemetryAccumRef.current += delta;
     if (telemetryAccumRef.current >= 0.1) {
+      const headingDeg = toHeadingDeg(forward);
+      const pitchDeg = toPitchDeg(forward);
       onTelemetryChange({
         speed: controller.speed,
         position: {
@@ -210,14 +233,16 @@ export const SpaceScene = ({
           y: controller.position.y,
           z: controller.position.z,
         },
+        headingDeg,
+        pitchDeg,
       });
       telemetryAccumRef.current = 0;
     }
 
-    const forward = controller.getForwardVector();
     const candidates: AimCandidate[] = [];
     let bestTargetId: number | null = null;
     let bestDist = Infinity;
+    let bestTargetDist = Infinity;
     const toStar = new Vector3();
 
     for (const star of starsRef.current) {
@@ -232,6 +257,7 @@ export const SpaceScene = ({
       if (dot > targetConeCos && dist < bestDist) {
         bestDist = dist;
         bestTargetId = star.id;
+        bestTargetDist = dist;
       }
 
       if (dist <= labelConeLength && dot > labelConeCos) {
@@ -260,7 +286,16 @@ export const SpaceScene = ({
         const star = starsByIdRef.current.get(bestTargetId);
         if (star) {
           const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-          onAimChange({ color: star.color, params, word: star.word });
+          const offset = star.position.clone().sub(controller.position);
+          const headingOffsetDeg = toHeadingDeg(offset);
+          onAimChange({
+            id: star.id,
+            color: star.color,
+            params,
+            word: star.word,
+            distance: Number.isFinite(bestTargetDist) ? bestTargetDist : undefined,
+            headingOffsetDeg,
+          });
         }
       } else {
         onAimChange(null);

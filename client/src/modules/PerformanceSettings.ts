@@ -4,6 +4,16 @@ export type SpacePerformanceSettings = {
   enabled: boolean;
   dprMin: number;
   dprMax: number;
+  showHud: boolean;
+  hudScale: number;
+  hudOpacity: number;
+  hudCrosshair: boolean;
+  hudSpeedometer: boolean;
+  hudPositionPanel: boolean;
+  hudHeadingCompass: boolean;
+  hudTargetPanel: boolean;
+  hudThrottleBar: boolean;
+  hudRangeReadout: boolean;
   antialias: boolean;
   backgroundStarDensity: number;
   backgroundPointSize: number;
@@ -21,6 +31,16 @@ export const DEFAULT_SPACE_PERFORMANCE_SETTINGS: SpacePerformanceSettings = {
   enabled: true,
   dprMin: 1.0,
   dprMax: 1.5,
+  showHud: true,
+  hudScale: 1,
+  hudOpacity: 0.95,
+  hudCrosshair: true,
+  hudSpeedometer: true,
+  hudPositionPanel: true,
+  hudHeadingCompass: true,
+  hudTargetPanel: true,
+  hudThrottleBar: true,
+  hudRangeReadout: true,
   antialias: false,
   backgroundStarDensity: 0.85,
   backgroundPointSize: 2.3,
@@ -45,6 +65,16 @@ export function normalizeSpacePerformanceSettings(
     enabled: input.enabled ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.enabled,
     dprMin: clamp(input.dprMin ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.dprMin, 0.5, 2),
     dprMax: clamp(input.dprMax ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.dprMax, 0.5, 2),
+    showHud: Boolean(input.showHud ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.showHud),
+    hudScale: clamp(input.hudScale ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudScale, 0.6, 1.4),
+    hudOpacity: clamp(input.hudOpacity ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudOpacity, 0.35, 1),
+    hudCrosshair: Boolean(input.hudCrosshair ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudCrosshair),
+    hudSpeedometer: Boolean(input.hudSpeedometer ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudSpeedometer),
+    hudPositionPanel: Boolean(input.hudPositionPanel ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudPositionPanel),
+    hudHeadingCompass: Boolean(input.hudHeadingCompass ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudHeadingCompass),
+    hudTargetPanel: Boolean(input.hudTargetPanel ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudTargetPanel),
+    hudThrottleBar: Boolean(input.hudThrottleBar ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudThrottleBar),
+    hudRangeReadout: Boolean(input.hudRangeReadout ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.hudRangeReadout),
     antialias: Boolean(input.antialias ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.antialias),
     backgroundStarDensity: clamp(
       input.backgroundStarDensity ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.backgroundStarDensity,
