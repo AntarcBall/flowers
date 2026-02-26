@@ -53,7 +53,7 @@ export default function GardenPage() {
           alpha: false,
         }}
       >
-        <GardenScene selectedStarData={selectedStarData} />
+        <GardenScene />
       </Canvas>
 
       <div
@@ -67,8 +67,8 @@ export default function GardenPage() {
         }}
       >
         <div style={{ position: 'absolute', top: 20, left: 20, color: 'white' }}>
-          <p>Back to Space to choose another star seed.</p>
-          <p>WASD to Scroll. Click ground to plant.</p>
+          <p>Garden is live; flowers are projected only when the space side plants a new star.</p>
+          <p>Keyboard controls are disabled in this view.</p>
         </div>
 
         <div

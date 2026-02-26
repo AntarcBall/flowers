@@ -23,10 +23,40 @@ export class GardenManager {
   flowers: FlowerData[] = [];
   selectedStarData: StarSelectionData | null = null;
   cameraPosition = new Vector3(CONFIG.GARDEN_SIZE / 2, CONFIG.GARDEN_SIZE / 2, 100);
+  private storageSignature = '';
+  private readOnlyMode = true;
+  private driftPhase = 0;
+  private readonly driftRadiusX = 4.6;
+  private readonly driftRadiusY = 3.3;
 
   init() {
-    this.flowers = this.ensureLabelPlacement(PersistenceService.load());
+    this.readOnlyMode = true;
+    this.cameraPosition = new Vector3(CONFIG.GARDEN_SIZE / 2, CONFIG.GARDEN_SIZE / 2, 100);
+    this.storageSignature = '';
+    this.reloadFromStorage(true);
     PersistenceService.save(this.flowers);
+  }
+
+  private buildStorageSignature(entries: FlowerData[]) {
+    if (entries.length === 0) return 'empty';
+    return entries
+      .map((entry) => `${entry.id}|${entry.timestamp}|${entry.plantedAt ?? entry.timestamp}`)
+      .join(',');
+  }
+
+  private materializeStoredFlowers() {
+    return this.ensureLabelPlacement(PersistenceService.load());
+  }
+
+  reloadFromStorage(force = false) {
+    const loaded = this.materializeStoredFlowers();
+    const signature = this.buildStorageSignature(loaded);
+    if (force || signature !== this.storageSignature) {
+      this.flowers = loaded;
+      this.storageSignature = signature;
+      return true;
+    }
+    return false;
   }
 
   private clamp01(value: number) {
@@ -231,13 +261,22 @@ export class GardenManager {
     return normalized;
   }
 
-  update(inputs: Record<string, boolean>, camera: OrthographicCamera) {
+  update(deltaTime: number, camera: OrthographicCamera, inputs?: Record<string, boolean>) {
     const { SCROLL_SPEED, GARDEN_SIZE } = CONFIG;
 
-    if (inputs['w'] || inputs['W']) this.cameraPosition.y += SCROLL_SPEED;
-    if (inputs['s'] || inputs['S']) this.cameraPosition.y -= SCROLL_SPEED;
-    if (inputs['a'] || inputs['A']) this.cameraPosition.x -= SCROLL_SPEED;
-    if (inputs['d'] || inputs['D']) this.cameraPosition.x += SCROLL_SPEED;
+    if (!this.readOnlyMode) {
+      const inputState = inputs ?? {};
+      if (inputState['w'] || inputState['W']) this.cameraPosition.y += SCROLL_SPEED;
+      if (inputState['s'] || inputState['S']) this.cameraPosition.y -= SCROLL_SPEED;
+      if (inputState['a'] || inputState['A']) this.cameraPosition.x -= SCROLL_SPEED;
+      if (inputState['d'] || inputState['D']) this.cameraPosition.x += SCROLL_SPEED;
+    } else {
+      this.driftPhase += deltaTime * 0.15;
+      const targetX = CONFIG.GARDEN_SIZE / 2 + Math.sin(this.driftPhase) * this.driftRadiusX;
+      const targetY = CONFIG.GARDEN_SIZE / 2 + Math.cos(this.driftPhase * 0.7) * this.driftRadiusY;
+      this.cameraPosition.x = MathUtils.lerp(this.cameraPosition.x, targetX, 0.18);
+      this.cameraPosition.y = MathUtils.lerp(this.cameraPosition.y, targetY, 0.18);
+    }
 
     this.cameraPosition.x = MathUtils.clamp(this.cameraPosition.x, 0, GARDEN_SIZE);
     this.cameraPosition.y = MathUtils.clamp(this.cameraPosition.y, 0, GARDEN_SIZE);

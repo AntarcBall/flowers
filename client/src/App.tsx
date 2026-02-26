@@ -13,7 +13,6 @@ type Telemetry = {
 
 function App() {
   const [view, setView] = useState<'SPACE' | 'GARDEN'>('SPACE');
-  const [selectedStar, setSelectedStar] = useState<any>(null);
   const [debugMode, setDebugMode] = useState(false);
   
   const [aimedStarData, setAimedStarData] = useState<any>(null);
@@ -26,8 +25,7 @@ function App() {
     return trunc.toFixed(2);
   };
 
-  const handleSelectStar = (data: any) => {
-    setSelectedStar(data);
+  const handleSelectStar = (_data: any) => {
     setView('GARDEN');
   };
 
@@ -53,14 +51,14 @@ function App() {
             onTelemetryChange={setTelemetry}
           />
         ) : (
-          <GardenScene selectedStarData={selectedStar} />
+          <GardenScene />
         )}
       </Canvas>
       {view === 'GARDEN' && (
         <div style={{ position: 'absolute', top: 20, left: 20, color: 'white', pointerEvents: 'none' }}>
           <button style={{ pointerEvents: 'auto' }} onClick={handleBack}>Back to Space</button>
-          <p>Click on ground to plant flower.</p>
-          <p>WASD to Scroll.</p>
+          <p>Garden is synchronized from star-selection events in Space.</p>
+          <p>Garden controls are intentionally read-only.</p>
         </div>
       )}
       {view === 'SPACE' && (
