@@ -107,7 +107,7 @@ export default function SpacePage() {
           <p>Aim at a star and press Space to plant.</p>
         </div>
 
-        <div style={{ position: 'absolute', top: 56, left: 20, color: 'white', display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: 96, left: 20, color: 'white', display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' }}>
           {toastQueue.map((toast) => (
             <div
               key={toast.id}
