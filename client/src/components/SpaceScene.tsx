@@ -120,7 +120,9 @@ export const SpaceScene = ({
   const density = Math.max(0.2, Math.min(1, settings.backgroundStarDensity));
   const sampleStep = Math.max(1, Math.round(settings.aimSampleStep || 1));
   const maxVisibleLabels = Math.max(0, Math.min(20, Math.round(settings.maxVisibleLabels || 0)));
-  const labelsEnabled = maxVisibleLabels > 0;
+  const showTargetHud = settings.showHud && settings.hudTargetPanel;
+  const labelsEnabled = showTargetHud && maxVisibleLabels > 0;
+  const showTargetMarker = settings.showHud && settings.hudTargetPanel;
   const labelBudgetSeconds = Math.max(0.024, Math.min(0.22, (settings.labelUpdateIntervalMs || 55) / 1000));
   const labelConeScale = Math.max(0.55, Math.min(1.35, settings.labelConeScale || 0.9));
   const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * labelConeScale;
@@ -605,7 +607,7 @@ export const SpaceScene = ({
       />
       {starLabels}
 
-      {aimedStar && (
+      {showTargetMarker && aimedStar && (
         <group position={aimedStar.position.toArray()}>
           <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
             <coneGeometry args={[1, 2, 4]} />

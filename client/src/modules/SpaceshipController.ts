@@ -1,11 +1,17 @@
 import { Vector3, Quaternion, MathUtils } from 'three';
 import { CONFIG } from '../config';
 
+const X_AXIS = new Vector3(1, 0, 0);
+const Y_AXIS = new Vector3(0, 1, 0);
+
 export class SpaceshipController {
   position = new Vector3(0, 0, 0);
   quaternion = new Quaternion();
   speed = 0;
   angularVelocity = { pitch: 0, yaw: 0 };
+  private readonly pitchQuaternion = new Quaternion();
+  private readonly yawQuaternion = new Quaternion();
+  private readonly forwardVector = new Vector3();
 
   update(deltaTime: number, inputState: Record<string, boolean>): boolean {
     const { MAX_SPEED, ACCEL_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
@@ -31,13 +37,13 @@ export class SpaceshipController {
     this.angularVelocity.pitch *= DAMPING_ROT;
     this.angularVelocity.yaw *= DAMPING_ROT;
 
-    const pitchQuaternion = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), this.angularVelocity.pitch);
-    const yawQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), this.angularVelocity.yaw);
+    this.pitchQuaternion.setFromAxisAngle(X_AXIS, this.angularVelocity.pitch);
+    this.yawQuaternion.setFromAxisAngle(Y_AXIS, this.angularVelocity.yaw);
 
-    this.quaternion.premultiply(yawQuaternion);
-    this.quaternion.multiply(pitchQuaternion);
+    this.quaternion.premultiply(this.yawQuaternion);
+    this.quaternion.multiply(this.pitchQuaternion);
 
-    const forwardVector = new Vector3(0, 0, 1).applyQuaternion(this.quaternion);
+    const forwardVector = this.getForwardVector();
     this.position.addScaledVector(forwardVector, this.speed * deltaTime);
 
     let warped = false;
@@ -51,7 +57,7 @@ export class SpaceshipController {
     return warped;
   }
 
-  getForwardVector() {
-    return new Vector3(0, 0, 1).applyQuaternion(this.quaternion).normalize();
+  getForwardVector(out: Vector3 = this.forwardVector) {
+    return out.set(0, 0, 1).applyQuaternion(this.quaternion).normalize();
   }
 }

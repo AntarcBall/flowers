@@ -80,6 +80,14 @@ export default function SpacePage() {
   const speedAngle = speedRatio * 180;
   const speedNeedleDeg = speedAngle - 90;
   const speedReadoutDeg = 180 - Math.round(speedAngle);
+  const showHud = performanceSettings.showHud;
+  const showCrosshair = showHud && performanceSettings.hudCrosshair;
+  const showSpeedometer = showHud && performanceSettings.hudSpeedometer;
+  const showPositionPanel = showHud && performanceSettings.hudPositionPanel;
+  const showHeadingCompass = showHud && performanceSettings.hudHeadingCompass;
+  const showTargetPanel = showHud && performanceSettings.hudTargetPanel;
+  const showThrottleBar = showHud && performanceSettings.hudThrottleBar;
+  const showRangeReadout = showHud && performanceSettings.hudRangeReadout;
   const formatCoordinate = (value: number) => {
     const trunc = Math.trunc(value * 100) / 100;
     return trunc.toFixed(2);
@@ -122,12 +130,38 @@ export default function SpacePage() {
           pointerEvents: 'none',
         }}
       >
-        <div style={{ position: 'absolute', top: 20, left: 20, color: 'white' }}>
-          <p>WASD to Rotate, QE to Speed up/down.</p>
-          <p>Aim at a star and press Space to plant.</p>
-        </div>
+        {showHud && (
+          <div style={{ position: 'absolute', top: 20, left: 20, color: 'white' }}>
+            <p>WASD to Rotate, QE to Speed up/down.</p>
+            <p>Aim at a star and press Space to plant.</p>
+          </div>
+        )}
 
-        <div style={{ position: 'absolute', top: 96, left: 20, color: 'white', display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' }}>
+        {showCrosshair && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: 22,
+              height: 22,
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+              <div
+                style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.6)', transform: 'translateX(-50%)' }}
+              />
+              <div
+                style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.6)', transform: 'translateY(-50%)' }}
+              />
+            </div>
+          </div>
+        )}
+
+        {showHud && (
+          <div style={{ position: 'absolute', top: 96, left: 20, color: 'white', display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' }}>
           {toastQueue.map((toast) => (
             <div
               key={toast.id}
@@ -141,11 +175,13 @@ export default function SpacePage() {
                 boxShadow: '0 0 12px rgba(0, 0, 0, 0.35)',
               }}
             >
-              {toast.word} - 새로운 꽃이 심겨졌습니다
+              {toast.word} - planted
             </div>
           ))}
         </div>
+        )}
 
+        {showSpeedometer && (
         <div
           style={{
             position: 'absolute',
@@ -197,32 +233,55 @@ export default function SpacePage() {
             <div style={{ position: 'absolute', top: 6, right: 10, fontSize: 11, color: '#ddd' }}>0</div>
           </div>
           <div style={{ marginTop: 4, textAlign: 'center', fontSize: 12, color: '#ddd' }}>
-            Speedometer {speedReadoutDeg}°
+            Speedometer {speedReadoutDeg} deg
           </div>
           <div style={{ textAlign: 'center', fontSize: 12, color: '#9bd7ff' }}>
             {telemetry.speed.toFixed(2)} / {Math.round(CONFIG.MAX_SPEED)}
           </div>
+          {showThrottleBar && (
+            <div style={{ marginTop: 6, padding: '0 12px' }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: 6,
+                  background: 'rgba(255,255,255,0.22)',
+                  borderRadius: 999,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.round(speedRatio * 100)}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #3ef3ff, #76f7b0)',
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+        )}
 
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            left: 20,
-            right: 20,
-            pointerEvents: 'auto',
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: '20px',
-            alignItems: 'flex-end',
-          }}
-        >
+        {showHud && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 20,
+              left: 20,
+              right: 20,
+              pointerEvents: 'auto',
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '20px',
+              alignItems: 'flex-end',
+            }}
+          >
           <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
             <button onClick={() => setDebugMode((prev) => !prev)}>
               Debug Cone: {debugMode ? 'ON' : 'OFF'}
             </button>
 
-            {aimedStarData && (
+            {showTargetPanel && aimedStarData && (
               <div style={CONFIG.PREVIEW as CSSProperties}>
                 <div style={{ padding: '5px', textAlign: 'center', color: 'white', fontSize: '12px' }}>
                   {aimedStarData.word}
@@ -232,27 +291,65 @@ export default function SpacePage() {
                 </div>
               </div>
             )}
+
+            {showRangeReadout && aimedStarData?.distance !== undefined && (
+              <div
+                style={{
+                  ...(CONFIG.PREVIEW as CSSProperties),
+                  width: 210,
+                  color: 'white',
+                  padding: '8px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <div style={{ fontSize: 12, marginBottom: 4 }}>Target Range</div>
+                <div style={{ fontSize: 12 }}>{aimedStarData.distance.toFixed(2)}</div>
+              </div>
+            )}
           </div>
 
+          {showPositionPanel && (
+            <div
+              style={{
+                ...(CONFIG.PREVIEW as CSSProperties),
+                width: 220,
+                height: 190,
+                color: 'white',
+                padding: '8px 10px',
+                boxSizing: 'border-box',
+                pointerEvents: 'none',
+              }}
+            >
+              <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Current Position</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}>
+                <div>X: {formatCoordinate(telemetry.position.x)}</div>
+                <div>Y: {formatCoordinate(telemetry.position.y)}</div>
+                <div>Z: {formatCoordinate(telemetry.position.z)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        )}
+
+        {showHeadingCompass && telemetry.headingDeg !== undefined && telemetry.pitchDeg !== undefined && (
           <div
             style={{
-              ...(CONFIG.PREVIEW as CSSProperties),
-              width: 220,
-              height: 190,
-              color: 'white',
-              padding: '8px 10px',
-              boxSizing: 'border-box',
+              position: 'absolute',
+              top: 20,
+              left: 20,
+              width: 170,
               pointerEvents: 'none',
+              color: '#d8f6ff',
+              fontSize: 11,
+              textAlign: 'left',
+              lineHeight: 1.4,
+              zIndex: 5,
             }}
           >
-            <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Current Position</div>
-            <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}>
-              <div>X: {formatCoordinate(telemetry.position.x)}</div>
-              <div>Y: {formatCoordinate(telemetry.position.y)}</div>
-              <div>Z: {formatCoordinate(telemetry.position.z)}</div>
-            </div>
+            <div>HDG {telemetry.headingDeg.toFixed(1)} deg</div>
+            <div>PIT {telemetry.pitchDeg.toFixed(1)} deg</div>
           </div>
-        </div>
+        )}
       </div>
 
       <button
@@ -303,6 +400,86 @@ export default function SpacePage() {
               style={{ marginRight: 6 }}
             />
             Antialias
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.showHud}
+              onChange={(e) => updatePerformance({ showHud: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            Show HUD
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudCrosshair}
+              onChange={(e) => updatePerformance({ hudCrosshair: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Crosshair
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudSpeedometer}
+              onChange={(e) => updatePerformance({ hudSpeedometer: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Speedometer
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudPositionPanel}
+              onChange={(e) => updatePerformance({ hudPositionPanel: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Position Panel
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudHeadingCompass}
+              onChange={(e) => updatePerformance({ hudHeadingCompass: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Heading
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudTargetPanel}
+              onChange={(e) => updatePerformance({ hudTargetPanel: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Target Panel
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudThrottleBar}
+              onChange={(e) => updatePerformance({ hudThrottleBar: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Throttle Bar
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={performanceSettings.hudRangeReadout}
+              onChange={(e) => updatePerformance({ hudRangeReadout: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            HUD Range Readout
           </label>
 
           <label style={{ display: 'block', marginBottom: 10 }}>
