@@ -11,9 +11,48 @@ export interface FlowerData {
   word: string;
   timestamp: number;
   plantedAt?: number;
+  lifeSpanMs?: number;
+  witheringMs?: number;
   labelOffsetX?: number;
   labelOffsetY?: number;
   labelRadius?: number;
+}
+
+type RawFlowerLike = Partial<FlowerData> & {
+  x?: unknown;
+  y?: unknown;
+  color?: unknown;
+  id?: unknown;
+  params?: unknown;
+  timestamp?: unknown;
+  plantedAt?: unknown;
+  word?: unknown;
+  lifeSpanMs?: unknown;
+  witheringMs?: unknown;
+  labelOffsetX?: unknown;
+  labelOffsetY?: unknown;
+  labelRadius?: unknown;
+};
+
+function sanitizeLifeSpan(rawSpan: unknown, fallback: number) {
+  const normalized = Number(rawSpan);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return fallback;
+  }
+
+  return normalized;
+}
+
+function sanitizeWithering(rawWithering: unknown, fallback: number, lifeSpanMs: number) {
+  const normalized = Number(rawWithering);
+  const fallbackWithering = Math.min(fallback, Math.max(1000, lifeSpanMs * 0.2));
+
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return fallbackWithering;
+  }
+
+  const bounded = Math.min(normalized, Math.max(1000, lifeSpanMs * 0.9));
+  return Math.max(1000, bounded);
 }
 
 function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
@@ -21,19 +60,7 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
     return null;
   }
 
-  const anyRaw = raw as Partial<FlowerData> & {
-    x?: unknown;
-    y?: unknown;
-    color?: unknown;
-    id?: unknown;
-    params?: unknown;
-    timestamp?: unknown;
-    plantedAt?: unknown;
-    word?: unknown;
-    labelOffsetX?: unknown;
-    labelOffsetY?: unknown;
-    labelRadius?: unknown;
-  };
+  const anyRaw = raw as RawFlowerLike;
 
   const color = typeof anyRaw.color === 'string' && anyRaw.color.trim() ? anyRaw.color : '#f2f6ff';
   const word =
@@ -58,6 +85,9 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
   const clampedX = Math.max(0, Math.min(CONFIG.GARDEN_SIZE, Number.isFinite(x) ? x : 0));
   const clampedY = Math.max(0, Math.min(CONFIG.GARDEN_SIZE, Number.isFinite(y) ? y : 0));
 
+  const lifeSpanMs = sanitizeLifeSpan(anyRaw.lifeSpanMs, CONFIG.FLOWER_LIFESPAN_MS);
+  const witheringMs = sanitizeWithering(anyRaw.witheringMs, CONFIG.FLOWER_WITHERING_MS, lifeSpanMs);
+
   return {
     id,
     x: clampedX,
@@ -67,6 +97,8 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
     params,
     timestamp: Number.isFinite(baseTimestamp) ? baseTimestamp : now,
     plantedAt: Number.isFinite(plantedAt) ? plantedAt : now,
+    lifeSpanMs,
+    witheringMs,
     labelOffsetX: Number.isFinite(labelOffsetX) ? labelOffsetX : undefined,
     labelOffsetY: Number.isFinite(labelOffsetY) ? labelOffsetY : undefined,
     labelRadius: Number.isFinite(labelRadius) ? labelRadius : undefined,

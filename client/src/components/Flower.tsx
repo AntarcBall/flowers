@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { AdditiveBlending, CanvasTexture, DoubleSide, SRGBColorSpace } from 'three';
+import { AdditiveBlending, CanvasTexture, Color, DoubleSide, SRGBColorSpace } from 'three';
 import type { FlowerRenderParams } from '../types';
 import { normalizeFlowerParams } from '../modules/FlowerShape';
 import { buildFlowerCanvas } from '../modules/FlowerCanvas';
@@ -9,6 +9,7 @@ type FlowerProps = {
   color: string;
   scale?: number;
   growth?: number;
+  vitality?: number;
 };
 
 const clamp = (value: number, min: number, max: number) => {
@@ -63,16 +64,27 @@ function getFlowerTexture(params: FlowerRenderParams, color: string, growth: num
   return texture;
 }
 
-const FlowerCore = ({ params, color, scale = 1, growth }: FlowerProps) => {
+function getVitalityColor(color: string, vitality: number) {
+  const parsed = new Color(color);
+  parsed.multiplyScalar(Math.max(0, Math.min(1, vitality)));
+  return `#${parsed.getHexString()}`;
+}
+
+const FlowerCore = ({ params, color, scale = 1, growth, vitality = 1 }: FlowerProps) => {
   const resolvedParams = useMemo(() => normalizeFlowerParams(params), [params]);
   const normalizedGrowth = clamp(growth === undefined ? 1 : growth, 0, 1);
+  const normalizedVitality = clamp(vitality, 0, 1);
+  const vigor = normalizedVitality;
+  const vitalityColor = useMemo(() => getVitalityColor(color, normalizedVitality), [color, normalizedVitality]);
   const texture = useMemo(
     () => getFlowerTexture(resolvedParams, color, normalizedGrowth),
     [resolvedParams, color, normalizedGrowth],
   );
   const groupScale = scale * (0.25 + 0.75 * normalizedGrowth);
-  const alpha = 0.35 + 0.65 * normalizedGrowth;
+  const alpha = (0.35 + 0.65 * normalizedGrowth) * (0.25 + 0.75 * vigor);
   const rim = 1 + resolvedParams.rimWidth * 0.12;
+  const witheringOverlay = Math.min(1, (1 - normalizedVitality) * 1.15);
+  const witherOpacity = Math.max(0, Math.min(1, witheringOverlay));
 
   return (
     <group scale={[groupScale, groupScale, 1]}>
@@ -80,6 +92,7 @@ const FlowerCore = ({ params, color, scale = 1, growth }: FlowerProps) => {
         <planeGeometry args={[rim * 1.16, rim * 1.16]} />
         <meshBasicMaterial
           map={texture}
+          color={vitalityColor}
           side={DoubleSide}
           transparent
           opacity={0.22 * alpha}
@@ -91,7 +104,20 @@ const FlowerCore = ({ params, color, scale = 1, growth }: FlowerProps) => {
 
       <mesh>
         <planeGeometry args={[rim, rim]} />
-        <meshBasicMaterial map={texture} side={DoubleSide} transparent opacity={alpha} toneMapped={false} />
+        <meshBasicMaterial map={texture} side={DoubleSide} color={vitalityColor} transparent opacity={alpha} toneMapped={false} />
+      </mesh>
+
+      <mesh position={[0, 0, 0.01]}>
+        <planeGeometry args={[rim, rim]} />
+        <meshBasicMaterial
+          map={texture}
+          color="#000000"
+          side={DoubleSide}
+          transparent
+          opacity={witherOpacity * 0.65 * alpha}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
     </group>
   );

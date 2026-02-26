@@ -18,6 +18,8 @@ const FLOWER_SPAWN_MARGIN = 20;
 const FLOWER_MIN_SEPARATION = 100;
 const FLOWER_TRIES_PER_RING = 22;
 const FLOWER_RING_FACTORS = [1.0, 1.2, 1.4, 1.75, 2.1];
+const MIN_LIFESPAN_MS = 30 * 1000;
+const MIN_WITHERING_MS = 5000;
 
 export class GardenManager {
   flowers: FlowerData[] = [];
@@ -40,7 +42,12 @@ export class GardenManager {
   private buildStorageSignature(entries: FlowerData[]) {
     if (entries.length === 0) return 'empty';
     return entries
-      .map((entry) => `${entry.id}|${entry.timestamp}|${entry.plantedAt ?? entry.timestamp}`)
+      .map(
+        (entry) =>
+          `${entry.id}|${entry.timestamp}|${entry.plantedAt ?? entry.timestamp}|${entry.lifeSpanMs ?? 0}|${
+            entry.witheringMs ?? 0
+          }`,
+      )
       .join(',');
   }
 
@@ -48,12 +55,63 @@ export class GardenManager {
     return this.ensureLabelPlacement(PersistenceService.load());
   }
 
+  private resolveLifeSpanMs(flower: FlowerData) {
+    const rawLifeSpan = Number(flower.lifeSpanMs);
+    const base = Number.isFinite(rawLifeSpan) && rawLifeSpan > 0 ? rawLifeSpan : CONFIG.FLOWER_LIFESPAN_MS;
+    return Math.max(MIN_LIFESPAN_MS, base);
+  }
+
+  private resolveWitheringMs(flower: FlowerData, lifeSpanMs: number) {
+    const rawWithering = Number(flower.witheringMs);
+    const base = Number.isFinite(rawWithering) && rawWithering > 0 ? rawWithering : CONFIG.FLOWER_WITHERING_MS;
+    const boundedBase = Math.min(base, Math.max(MIN_WITHERING_MS, lifeSpanMs * 0.9));
+    return Math.max(MIN_WITHERING_MS, boundedBase);
+  }
+
+  private filterExpired(flowers: FlowerData[], now = Date.now()) {
+    const alive: FlowerData[] = [];
+    let removed = 0;
+
+    for (const flower of flowers) {
+      const plantedAt = Number.isFinite(flower.plantedAt) ? flower.plantedAt : flower.timestamp;
+      const ageMs = Math.max(0, now - plantedAt);
+      const lifeSpanMs = this.resolveLifeSpanMs(flower);
+      if (ageMs < lifeSpanMs) {
+        alive.push(flower);
+      } else {
+        removed += 1;
+      }
+    }
+
+    return { flowers: alive, removed };
+  }
+
+  private pruneExpiredFlowers(now: number = Date.now()) {
+    const { flowers: alive, removed } = this.filterExpired(this.flowers, now);
+
+    if (removed > 0) {
+      this.flowers = alive;
+      if (this.flowers.length === 0) {
+        this.storageSignature = '';
+      } else {
+        this.storageSignature = this.buildStorageSignature(this.flowers);
+      }
+      PersistenceService.save(this.flowers);
+      return true;
+    }
+
+    return false;
+  }
+
   reloadFromStorage(force = false) {
-    const loaded = this.materializeStoredFlowers();
+    const { flowers: loaded, removed } = this.filterExpired(this.materializeStoredFlowers(), Date.now());
     const signature = this.buildStorageSignature(loaded);
     if (force || signature !== this.storageSignature) {
       this.flowers = loaded;
       this.storageSignature = signature;
+      if (removed) {
+        PersistenceService.save(this.flowers);
+      }
       return true;
     }
     return false;
@@ -283,6 +341,32 @@ export class GardenManager {
 
     camera.position.set(this.cameraPosition.x, this.cameraPosition.y, 100);
     camera.lookAt(this.cameraPosition.x, this.cameraPosition.y, 0);
+
+    return this.pruneExpiredFlowers();
+  }
+
+  getFlowerState(flower: FlowerData, now = Date.now()) {
+    const plantedAt = Number.isFinite(flower.plantedAt) ? flower.plantedAt : flower.timestamp;
+    const ageMs = Math.max(0, now - plantedAt);
+    const lifeSpanMs = this.resolveLifeSpanMs(flower);
+    const witheringMs = this.resolveWitheringMs(flower, lifeSpanMs);
+    const witherStartMs = Math.max(0, lifeSpanMs - witheringMs);
+    let vitality = 1;
+
+    if (ageMs >= lifeSpanMs) {
+      vitality = 0;
+    } else if (ageMs > witherStartMs) {
+      vitality = 1 - (ageMs - witherStartMs) / witheringMs;
+    }
+
+    return {
+      plantedAt,
+      ageMs,
+      growth: Math.min(1, Math.max(0, ageMs / CONFIG.FLOWER_GROWTH_MS)),
+      lifeSpanMs,
+      witheringMs,
+      vitality: Math.max(0, Math.min(1, vitality)),
+    };
   }
 
   plantFlower(x: number, y: number) {
@@ -305,6 +389,8 @@ export class GardenManager {
       word,
       timestamp: now,
       plantedAt: now,
+      lifeSpanMs: Math.round(CONFIG.FLOWER_LIFESPAN_MS * (0.7 + 0.6 * this.hash01(resolvedX, resolvedY))),
+      witheringMs: Math.round(CONFIG.FLOWER_WITHERING_MS * (0.6 + 0.8 * this.hash01(resolvedY, resolvedX))),
       labelOffsetX: offsetX,
       labelOffsetY: offsetY,
       labelRadius,

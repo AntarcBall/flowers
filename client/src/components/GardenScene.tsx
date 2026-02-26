@@ -10,9 +10,11 @@ export const GardenScene = () => {
   const manager = useMemo(() => new GardenManager(), []);
   const { camera } = useThree();
   const [flowers, setFlowers] = useState<FlowerData[]>(manager.flowers);
+  const [lifeClock, setLifeClock] = useState(() => Date.now());
   const ambientPulseRef = useRef<PointLight>(null);
   const rimPulseRef = useRef<PointLight>(null);
   const edgePulseRef = useRef<PointLight>(null);
+  const lastLifeTickRef = useRef(0);
 
   useEffect(() => {
     manager.init();
@@ -43,7 +45,17 @@ export const GardenScene = () => {
   }, [manager]);
 
   useFrame((state, delta) => {
-    manager.update(delta, camera as ThreeOrthographicCamera);
+    const removed = manager.update(delta, camera as ThreeOrthographicCamera);
+    if (removed) {
+      setFlowers([...manager.flowers]);
+    }
+
+    const now = Date.now();
+    if (now - lastLifeTickRef.current > 500) {
+      lastLifeTickRef.current = now;
+      setLifeClock(now);
+    }
+
     const t = state.clock.getElapsedTime();
     if (ambientPulseRef.current) {
       ambientPulseRef.current.intensity = 0.55 + Math.sin(t * 0.20) * 0.08;
@@ -159,14 +171,14 @@ export const GardenScene = () => {
       </mesh>
 
       {flowers.map((flower: FlowerData) => {
-        const plantedAt = flower.plantedAt ?? flower.timestamp;
-        const progress = Math.min(1, Math.max(0, (Date.now() - plantedAt) / CONFIG.FLOWER_GROWTH_MS));
+        const { growth, vitality } = manager.getFlowerState(flower, lifeClock);
         const labelOffsetX = flower.labelOffsetX ?? 0;
         const labelOffsetY = flower.labelOffsetY ?? 0;
+        const labelOpacity = 0.2 + vitality * 0.8;
 
         return (
           <group key={flower.id} position={[flower.x, flower.y, CONFIG.FLOWER_ANCHOR_Z]}>
-            <Flower params={flower.params} color={flower.color} scale={104} growth={progress} />
+            <Flower params={flower.params} color={flower.color} scale={104} growth={growth} vitality={vitality} />
             {flower.word && (
               <Html position={[labelOffsetX, labelOffsetY, 0.35]} center distanceFactor={22} transform>
                 <div
@@ -183,6 +195,7 @@ export const GardenScene = () => {
                     fontFamily: 'Georgia, "Times New Roman", serif',
                     letterSpacing: 0.25,
                     backdropFilter: 'blur(1.5px)',
+                    opacity: Number(labelOpacity.toFixed(3)),
                   }}
                 >
                   {flower.word}

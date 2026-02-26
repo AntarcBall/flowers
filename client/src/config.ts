@@ -63,6 +63,8 @@ export const CONFIG = {
   STORAGE_KEY: 'garden_flowers',
 
   FLOWER_GROWTH_MS: 700,
+  FLOWER_LIFESPAN_MS: 1000 * 60 * 60 * 24,
+  FLOWER_WITHERING_MS: 1000 * 60 * 60 * 2,
   FLOWER_ANCHOR_Z: 0.9,
   FLOWER_SHAPE: {
     segments: { min: 140, max: 420 },

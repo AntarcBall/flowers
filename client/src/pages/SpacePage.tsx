@@ -32,6 +32,7 @@ export default function SpacePage() {
     sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
     const savedFlowers = PersistenceService.load();
     const { x, y } = makeRandomPosition();
+    const now = Date.now();
     const newFlower: FlowerData = {
       id: makeFlowerId(),
       x,
@@ -39,7 +40,10 @@ export default function SpacePage() {
       color: data.color,
       params: data.params,
       word: data.word,
-      timestamp: Date.now(),
+      timestamp: now,
+      plantedAt: now,
+      lifeSpanMs: Math.round(CONFIG.FLOWER_LIFESPAN_MS * (0.7 + 0.6 * Math.random())),
+      witheringMs: Math.round(CONFIG.FLOWER_WITHERING_MS * (0.6 + 0.8 * Math.random())),
     };
 
     savedFlowers.push(newFlower);
