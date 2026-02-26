@@ -3,7 +3,17 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
 import { useInput } from '../hooks/useInput';
-import { Vector3, Group, PerspectiveCamera, AdditiveBlending } from 'three';
+import {
+  Vector3,
+  Group,
+  PerspectiveCamera,
+  AdditiveBlending,
+  Matrix4,
+  Color,
+  InstancedMesh,
+  SphereGeometry,
+  MeshBasicMaterial,
+} from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
 import { DEFAULT_SPACE_PERFORMANCE_SETTINGS, type SpacePerformanceSettings } from '../modules/PerformanceSettings';
@@ -147,10 +157,18 @@ export const SpaceScene = ({
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
   const labelVisibleKeyRef = useRef('');
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
+  const starsInstancedMeshRef = useRef<InstancedMesh>(null);
 
   const [stars, setStars] = useState<SpaceStar[]>([]);
   const starsRef = useRef<SpaceStar[]>([]);
   const starsByIdRef = useRef<Map<number, SpaceStar>>(new Map());
+  const starMatrix = useRef(new Matrix4());
+  const starColor = useRef(new Color());
+  const starGeometry = useMemo(
+    () => new SphereGeometry(STAR_MESH_RADIUS, starSegments, starSegments),
+    [starSegments],
+  );
+  const starMaterial = useMemo(() => new MeshBasicMaterial({ vertexColors: true }), []);
   const renderedStars = useMemo(
     () => (sampleStep <= 1 ? stars : stars.filter((_, index) => index % sampleStep === 0)),
     [stars, sampleStep],
@@ -191,6 +209,40 @@ export const SpaceScene = ({
   useEffect(() => {
     starsRef.current = renderedStars;
     starsByIdRef.current = createStarLookup(renderedStars);
+  }, [renderedStars]);
+
+  useEffect(() => {
+    const mesh = starsInstancedMeshRef.current;
+    if (!mesh) return;
+    mesh.count = renderedStars.length;
+
+    for (let index = 0; index < renderedStars.length; index += 1) {
+      const star = renderedStars[index];
+      starMatrix.current.set(
+        1,
+        0,
+        0,
+        star.position.x,
+        0,
+        1,
+        0,
+        star.position.y,
+        0,
+        0,
+        1,
+        star.position.z,
+        0,
+        0,
+        0,
+        1,
+      );
+      mesh.setMatrixAt(index, starMatrix.current);
+      starColor.current.set(star.color);
+      mesh.setColorAt(index, starColor.current);
+    }
+
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor?.needsUpdate = true;
   }, [renderedStars]);
 
   useEffect(() => {
@@ -377,36 +429,28 @@ export const SpaceScene = ({
     return effect.target.clone().lerp(shipPosition, segmentT);
   };
 
-  const starMeshes = useMemo(() => {
-    return renderedStars.map((star) => {
-      const isAimed = star.id === aimedStarId;
-      const showText = labelVisibleStarIds.has(star.id) || isAimed;
+  const starLabels = useMemo(() => {
+    if (!labelsEnabled && aimedStarId === null) return [];
 
+    const visibleIds = new Set(labelVisibleStarIds);
+    if (aimedStarId !== null) {
+      visibleIds.add(aimedStarId);
+    }
+
+    return [...visibleIds].map((id) => {
+      const star = starsByIdRef.current.get(id);
+      if (!star) return null;
       return (
-        <group key={star.id} position={star.position}>
-          <mesh>
-            <sphereGeometry args={[STAR_MESH_RADIUS, starSegments, starSegments]} />
-            <meshBasicMaterial color={star.color} />
-          </mesh>
-
-          {isAimed && (
-            <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
-              <coneGeometry args={[1, 2, 4]} />
-              <meshBasicMaterial color="white" />
-            </mesh>
-          )}
-
-          {showText && (
-            <Html distanceFactor={10}>
-              <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
-                {star.word}
-              </div>
-            </Html>
-          )}
-        </group>
+        <Html key={star.id} position={star.position.toArray()} distanceFactor={10}>
+          <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
+            {star.word}
+          </div>
+        </Html>
       );
     });
-  }, [aimedStarId, labelVisibleStarIds, renderedStars, starSegments, labelFontSize]);
+  }, [aimedStarId, labelVisibleStarIds, labelFontSize, labelsEnabled]);
+
+  const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
 
   return (
     <>
@@ -554,7 +598,21 @@ export const SpaceScene = ({
         />
       </points>
 
-      {starMeshes}
+      <instancedMesh
+        ref={starsInstancedMeshRef}
+        frustumCulled={false}
+        args={[starGeometry, starMaterial, renderedStars.length]}
+      />
+      {starLabels}
+
+      {aimedStar && (
+        <group position={aimedStar.position.toArray()}>
+          <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
+            <coneGeometry args={[1, 2, 4]} />
+            <meshBasicMaterial color="white" />
+          </mesh>
+        </group>
+      )}
 
       {launchEffects.map((effect) => {
         const position = getLaunchPosition(effect);
