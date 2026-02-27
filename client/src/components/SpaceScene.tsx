@@ -138,8 +138,7 @@ export const SpaceScene = ({
   const density = Math.max(0.2, Math.min(1, settings.backgroundStarDensity));
   const sampleStep = Math.max(1, Math.round(settings.aimSampleStep || 1));
   const maxVisibleLabels = Math.max(0, Math.min(20, Math.round(settings.maxVisibleLabels || 0)));
-  const showTargetHud = settings.showHud && settings.hudTargetPanel;
-  const labelsEnabled = showTargetHud && maxVisibleLabels > 0;
+  const labelsEnabled = maxVisibleLabels > 0;
   const showTargetMarker = settings.showHud && settings.hudTargetPanel;
   const labelBudgetSeconds = Math.max(0.024, Math.min(0.22, (settings.labelUpdateIntervalMs || 55) / 1000));
   const labelConeScale = Math.max(0.55, Math.min(1.35, settings.labelConeScale || 0.9));
@@ -422,7 +421,13 @@ export const SpaceScene = ({
       const star = starsByIdRef.current.get(id);
       if (!star) return null;
       return (
-        <Html key={star.id} position={star.position.toArray()} distanceFactor={10}>
+        <Html
+          key={star.id}
+          position={star.position.toArray()}
+          distanceFactor={10}
+          occlude={false}
+          zIndexRange={[0, 100]}
+        >
           <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
             {star.word}
           </div>
