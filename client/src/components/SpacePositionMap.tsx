@@ -1,3 +1,5 @@
+import { CONFIG } from '../config';
+
 type SpacePositionLike = {
   x: number;
   y: number;
@@ -6,6 +8,7 @@ type SpacePositionLike = {
 
 type SpacePositionMapProps = {
   position: SpacePositionLike;
+  velocity?: SpacePositionLike;
   size?: number;
   title?: string;
 };
@@ -108,7 +111,14 @@ function pointDistance(a: Point3D, b: Point3D) {
   return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2) + Math.pow(a.z - b.z, 2));
 }
 
-export function SpacePositionMap({ position, size = 190, title = 'Current Position' }: SpacePositionMapProps) {
+const SPEED_ARROW_SCALE = 0.9;
+
+export function SpacePositionMap({
+  position,
+  velocity = { x: 0, y: 0, z: 0 },
+  size = 190,
+  title = 'Current Position',
+}: SpacePositionMapProps) {
   const cx = size / 2;
   const cy = size / 2;
   const margin = size * 0.09;
@@ -146,6 +156,38 @@ export function SpacePositionMap({ position, size = 190, title = 'Current Positi
     cy,
     1,
   );
+  const mappedVelocity = {
+    x: clamp(
+      (velocity.x / CONFIG.MAX_SPEED) * CUBE_HALF * SPEED_ARROW_SCALE,
+      -CUBE_HALF * SPEED_ARROW_SCALE,
+      CUBE_HALF * SPEED_ARROW_SCALE,
+    ),
+    y: clamp(
+      (velocity.y / CONFIG.MAX_SPEED) * CUBE_HALF * SPEED_ARROW_SCALE,
+      -CUBE_HALF * SPEED_ARROW_SCALE,
+      CUBE_HALF * SPEED_ARROW_SCALE,
+    ),
+    z: clamp(
+      (velocity.z / CONFIG.MAX_SPEED) * CUBE_HALF * SPEED_ARROW_SCALE,
+      -CUBE_HALF * SPEED_ARROW_SCALE,
+      CUBE_HALF * SPEED_ARROW_SCALE,
+    ),
+  };
+  const velocityTip3D = {
+    x: clamp((worldToCube.x * CUBE_HALF) + mappedVelocity.x, -CUBE_HALF, CUBE_HALF),
+    y: clamp((worldToCube.y * CUBE_HALF) + mappedVelocity.y, -CUBE_HALF, CUBE_HALF),
+    z: clamp((worldToCube.z * CUBE_HALF) + mappedVelocity.z, -CUBE_HALF, CUBE_HALF),
+  };
+  const velocityTip = toOrthographicProjection(
+    rotateCubeForMap(toModel(velocityTip3D)),
+    cx,
+    cy,
+    1,
+  );
+  const velocityMagnitude = Math.sqrt(
+    Math.pow(velocity.x, 2) + Math.pow(velocity.y, 2) + Math.pow(velocity.z, 2),
+  );
+  const hasVelocity = velocityMagnitude > 0.0001;
   const spawn = toOrthographicProjection(rotateCubeForMap(toModel({ x: 0, y: 0, z: 0 })), cx, cy, 1);
 
   const worldDistance = Math.sqrt(
@@ -205,6 +247,9 @@ export function SpacePositionMap({ position, size = 190, title = 'Current Positi
             <stop offset="0%" stopColor="rgba(170, 232, 255, 0.22)" />
             <stop offset="100%" stopColor="rgba(120, 200, 255, 0.08)" />
           </linearGradient>
+          <filter id="gpsVelocityGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#7fffb0" floodOpacity="0.8" />
+          </filter>
         </defs>
 
         <polygon
@@ -328,6 +373,53 @@ export function SpacePositionMap({ position, size = 190, title = 'Current Positi
           SP
         </text>
 
+        {hasVelocity && (
+          <>
+            {(() => {
+              const dx = velocityTip.x - ship.x;
+              const dy = velocityTip.y - ship.y;
+              const head = Math.max(6, Math.min(12, Math.hypot(dx, dy) * 0.42));
+              const inv = Math.hypot(dx, dy) > 0.0001 ? 1 / Math.hypot(dx, dy) : 0;
+              const ux = dx * inv;
+              const uy = dy * inv;
+              const leftX = velocityTip.x - ux * head - uy * 0.45 * head;
+              const leftY = velocityTip.y - uy * head + ux * 0.45 * head;
+              const rightX = velocityTip.x - ux * head + uy * 0.45 * head;
+              const rightY = velocityTip.y - uy * head - ux * 0.45 * head;
+
+              return (
+                <>
+                  <line
+                    x1={ship.x}
+                    y1={ship.y}
+                    x2={velocityTip.x}
+                    y2={velocityTip.y}
+                    stroke="#7fffb0"
+                    strokeWidth={1.6}
+                    filter="url(#gpsVelocityGlow)"
+                  />
+                  <line
+                    x1={velocityTip.x}
+                    y1={velocityTip.y}
+                    x2={leftX}
+                    y2={leftY}
+                    stroke="#7fffb0"
+                    strokeWidth={1.4}
+                  />
+                  <line
+                    x1={velocityTip.x}
+                    y1={velocityTip.y}
+                    x2={rightX}
+                    y2={rightY}
+                    stroke="#7fffb0"
+                    strokeWidth={1.4}
+                  />
+                </>
+              );
+            })()}
+          </>
+        )}
+
         <line
           x1={ship.x - 2}
           y1={ship.y - 2}
@@ -347,11 +439,16 @@ export function SpacePositionMap({ position, size = 190, title = 'Current Positi
         <circle cx={ship.x} cy={ship.y} r={3.4} fill="#ffd36a" />
       </svg>
 
-      <div style={{ width: '100%', fontFamily: 'monospace', fontSize: 10, lineHeight: 1.45, opacity: 0.94 }}>
+        <div style={{ width: '100%', fontFamily: 'monospace', fontSize: 10, lineHeight: 1.45, opacity: 0.94 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
           <span>dx:{worldToCube.x.toFixed(2)}</span>
           <span>dy:{worldToCube.y.toFixed(2)}</span>
           <span>dz:{worldToCube.z.toFixed(2)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+          <span>vx:{velocity.x.toFixed(2)}</span>
+          <span>vy:{velocity.y.toFixed(2)}</span>
+          <span>vz:{velocity.z.toFixed(2)}</span>
         </div>
         <div>
           abs: x {worldToCube.x.toFixed(3)} y {worldToCube.y.toFixed(3)} z {worldToCube.z.toFixed(3)}
@@ -360,6 +457,7 @@ export function SpacePositionMap({ position, size = 190, title = 'Current Positi
           axis bias: X {axisX.toFixed(2)} Y {axisY.toFixed(2)} Z {axisZ.toFixed(2)}
         </div>
         <div>Distance: {worldDistance}m</div>
+        <div>Velocity: {hasVelocity ? `${velocityMagnitude.toFixed(2)}m/s` : '0.00m/s'}</div>
       </div>
     </div>
   );

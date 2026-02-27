@@ -17,6 +17,11 @@ import './App.css';
 type Telemetry = {
   speed: number;
   position: { x: number; y: number; z: number };
+  velocity?: {
+    x: number;
+    y: number;
+    z: number;
+  };
   headingDeg?: number;
   pitchDeg?: number;
 };
@@ -440,7 +445,7 @@ function App() {
                       <div>P: {typeof telemetry.pitchDeg === 'number' ? `${Math.round(telemetry.pitchDeg)}°` : '0°'}</div>
                     </div>
                   </div>
-                  <SpacePositionMap position={telemetry.position} size={190} />
+                  <SpacePositionMap position={telemetry.position} velocity={telemetry.velocity} size={190} />
                 </div>
               )}
             </div>
@@ -637,9 +642,21 @@ function App() {
                   type="range"
                   min={0.5}
                   max={30}
-                  step={0.05}
+                  step={0.01}
                   value={performanceSettings.labelFontScale}
                   onChange={(e) => updatePerformance({ labelFontScale: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Label minimum font size ({performanceSettings.labelFontMin}px)
+                <input
+                  type="range"
+                  min={1}
+                  max={30}
+                  step={1}
+                  value={performanceSettings.labelFontMin}
+                  onChange={(e) => updatePerformance({ labelFontMin: Number(e.target.value) })}
                   style={{ width: '100%' }}
                 />
               </label>
@@ -749,6 +766,18 @@ function App() {
                     />
                   </label>
                   <label style={{ display: 'block', marginBottom: 8 }}>
+                    Star scale ({performanceSettings.starScale.toFixed(2)})
+                    <input
+                      type="range"
+                      min={0.2}
+                      max={3}
+                      step={0.05}
+                      value={performanceSettings.starScale}
+                      onChange={(e) => updatePerformance({ starScale: Number(e.target.value) })}
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                  <label style={{ display: 'block', marginBottom: 8 }}>
                     Grid density ({Math.round((performanceSettings.gridDensity || 0) * 100)}%)
                     <input
                       type="range"
@@ -775,6 +804,18 @@ function App() {
                       step={1}
                       value={performanceSettings.launchTrailLimit}
                       onChange={(e) => updatePerformance({ launchTrailLimit: Number(e.target.value) })}
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                  <label style={{ display: 'block', marginBottom: 8 }}>
+                    Ship scale ({performanceSettings.shipScale.toFixed(2)})
+                    <input
+                      type="range"
+                      min={0.2}
+                      max={3}
+                      step={0.05}
+                      value={performanceSettings.shipScale}
+                      onChange={(e) => updatePerformance({ shipScale: Number(e.target.value) })}
                       style={{ width: '100%' }}
                     />
                   </label>
@@ -808,10 +849,13 @@ function App() {
                       backgroundStarDensity: 0.35,
                       backgroundPointSize: 1.2,
                       starGeometrySegments: 4,
+                      starScale: 1,
                       maxVisibleLabels: 4,
                       labelUpdateIntervalMs: 160,
                       labelConeScale: 0.7,
                       labelFontScale: 1,
+                      labelFontMin: 10,
+                      shipScale: 1,
                       aimSampleStep: 3,
                       launchTrailLimit: 2,
                       shipQuality: 0,

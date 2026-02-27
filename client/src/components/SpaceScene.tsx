@@ -20,6 +20,7 @@ import { CONFIG } from '../config';
 type Telemetry = {
   speed: number;
   position: { x: number; y: number; z: number };
+  velocity?: { x: number; y: number; z: number };
   headingDeg?: number;
   pitchDeg?: number;
 };
@@ -146,13 +147,16 @@ export const SpaceScene = ({
   const targetConeCos = Math.cos(labelConeAngle * 0.83);
   const labelConeLength = LABEL_CONE_LENGTH_BASE * labelConeScale;
   const starSegments = Math.max(4, Math.min(16, Math.round(settings.starGeometrySegments || 8)));
+  const starScale = Math.max(0.2, Math.min(3, settings.starScale || 1));
+  const shipScale = Math.max(0.2, Math.min(3, settings.shipScale || 1));
   const launchTrailLimit = Math.max(0, Math.round(settings.launchTrailLimit || 0));
   const useHighQualityShip = (settings.shipQuality || 0) >= 0.5;
   const showGrid = (settings.gridDensity || 1) >= 0.4;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
   const labelFontScale = Math.max(0.5, Math.min(30, settings.labelFontScale || 1));
+  const labelFontMin = Math.max(1, Math.min(30, Math.round(settings.labelFontMin || 10)));
   const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
-  const labelFontSize = Math.max(10, Math.round(baseLabelFontSize * labelFontScale));
+  const labelFontSize = Math.max(labelFontMin, Math.round(baseLabelFontSize * labelFontScale));
   const labelOffsetX = clamp(settings.labelOffsetX || 0, -1000, 100);
   const labelOffsetY = clamp(settings.labelOffsetY || 0, -300, 100);
   const debugEnabled = debugMode;
@@ -184,8 +188,8 @@ export const SpaceScene = ({
   const starsRef = useRef<SpaceStar[]>([]);
   const starsByIdRef = useRef<Map<number, SpaceStar>>(new Map());
   const starGeometry = useMemo(
-    () => new SphereGeometry(STAR_MESH_RADIUS, starSegments, starSegments),
-    [starSegments],
+    () => new SphereGeometry(STAR_MESH_RADIUS * starScale, starSegments, starSegments),
+    [starSegments, starScale],
   );
 
   const backgroundStars = useMemo(() => {
@@ -257,6 +261,11 @@ export const SpaceScene = ({
     }
     tpsCamera.update(camera as PerspectiveCamera, controller, delta);
     const forward = controller.getForwardVector();
+    const velocity = {
+      x: forward.x * controller.speed,
+      y: forward.y * controller.speed,
+      z: forward.z * controller.speed,
+    };
 
     telemetryAccumRef.current += delta;
     if (telemetryAccumRef.current >= 0.1) {
@@ -269,6 +278,7 @@ export const SpaceScene = ({
           y: controller.position.y,
           z: controller.position.z,
         },
+        velocity,
         headingDeg,
         pitchDeg,
       });
@@ -500,7 +510,7 @@ export const SpaceScene = ({
 
   return (
     <>
-      <group ref={shipRef}>
+      <group ref={shipRef} scale={shipScale}>
         <group>
           <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <capsuleGeometry args={[0.28, 1.6, 12, 22]} />

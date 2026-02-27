@@ -18,10 +18,13 @@ export type SpacePerformanceSettings = {
   backgroundStarDensity: number;
   backgroundPointSize: number;
   starGeometrySegments: number;
+  starScale: number;
+  shipScale: number;
   maxVisibleLabels: number;
   labelUpdateIntervalMs: number;
   labelConeScale: number;
   labelFontScale: number;
+  labelFontMin: number;
   labelOffsetX: number;
   labelOffsetY: number;
   aimSampleStep: number;
@@ -48,10 +51,13 @@ export const DEFAULT_SPACE_PERFORMANCE_SETTINGS: SpacePerformanceSettings = {
   backgroundStarDensity: 0.85,
   backgroundPointSize: 2.3,
   starGeometrySegments: 8,
+  starScale: 1,
+  shipScale: 1,
   maxVisibleLabels: 8,
   labelUpdateIntervalMs: 55,
   labelConeScale: 0.9,
   labelFontScale: 1,
+  labelFontMin: 10,
   labelOffsetX: 0,
   labelOffsetY: 0,
   aimSampleStep: 1,
@@ -97,6 +103,16 @@ export function normalizeSpacePerformanceSettings(
       4,
       16,
     )),
+    starScale: clamp(
+      input.starScale ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.starScale,
+      0.2,
+      3,
+    ),
+    shipScale: clamp(
+      input.shipScale ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.shipScale,
+      0.2,
+      3,
+    ),
     maxVisibleLabels: Math.round(clamp(
       input.maxVisibleLabels ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.maxVisibleLabels,
       0,
@@ -117,6 +133,7 @@ export function normalizeSpacePerformanceSettings(
       0.5,
       30,
     ),
+    labelFontMin: clamp(Math.round(input.labelFontMin ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelFontMin), 1, 30),
     labelOffsetX: Math.round(clamp(input.labelOffsetX ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetX, -1000, 100)),
     labelOffsetY: Math.round(clamp(input.labelOffsetY ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetY, -300, 100)),
     aimSampleStep: Math.max(1, Math.round(clamp(
