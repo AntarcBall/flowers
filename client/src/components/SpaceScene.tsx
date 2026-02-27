@@ -58,6 +58,26 @@ type SpaceStar = {
   
 const getStarColor = (x: number, y: number, z: number) =>
   SemanticMapper.mapCoordinatesToColor(x, y, z);
+const DEFAULT_STAR_COLOR = '#7a8cff';
+const isValidHexColor = (value: string) => /^#([0-9a-f]{6})$/i.test(value);
+
+const resolveStarColor = (coordColor: string, fallbackColor?: string) => {
+  const probe = new Color();
+  const parseToHex = (value?: string) => {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    probe.set(trimmed);
+    const hex = `#${probe.getHexString()}`;
+    return isValidHexColor(hex) && hex.toLowerCase() !== '#000000' ? hex : null;
+  };
+
+  return parseToHex(coordColor) ?? parseToHex(fallbackColor) ?? DEFAULT_STAR_COLOR;
+};
 
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
@@ -258,7 +278,7 @@ export const SpaceScene = ({
           (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => ({
             id: s.id,
             word: s.word,
-            color: getStarColor(s.x, s.y, s.z),
+            color: resolveStarColor(getStarColor(s.x, s.y, s.z), s.color),
             position: new Vector3(s.x, s.y, s.z),
           })
         );
