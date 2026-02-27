@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { FlowerPreview } from '../components/FlowerPreview';
 import { SpaceScene } from '../components/SpaceScene';
+import { SpacePositionMap } from '../components/SpacePositionMap';
 import { CONFIG } from '../config';
 import { PersistenceService } from '../modules/PersistenceService';
 import type { FlowerData } from '../modules/PersistenceService';
@@ -17,10 +18,26 @@ import {
 } from '../modules/PerformanceSettings';
 import '../App.css';
 
+type AimedStarData = StarSelectionData & {
+  distance?: number;
+  headingOffsetDeg?: number;
+};
+
+type TelemetryData = {
+  speed: number;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  headingDeg?: number;
+  pitchDeg?: number;
+};
+
 export default function SpacePage() {
   const [debugMode, setDebugMode] = useState(false);
-  const [aimedStarData, setAimedStarData] = useState<StarSelectionData | null>(null);
-  const [telemetry, setTelemetry] = useState({
+  const [aimedStarData, setAimedStarData] = useState<AimedStarData | null>(null);
+  const [telemetry, setTelemetry] = useState<TelemetryData>({
     speed: 0,
     position: { x: 0, y: 0, z: 0 },
   });
@@ -309,27 +326,30 @@ export default function SpacePage() {
           </div>
 
           {showPositionPanel && (
-            <div
-              style={{
-                ...(CONFIG.PREVIEW as CSSProperties),
-                width: 220,
-                height: 190,
-                color: 'white',
-                padding: '8px 10px',
-                boxSizing: 'border-box',
-                pointerEvents: 'none',
-              }}
-            >
-              <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Current Position</div>
-              <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}>
-                <div>X: {formatCoordinate(telemetry.position.x)}</div>
-                <div>Y: {formatCoordinate(telemetry.position.y)}</div>
-                <div>Z: {formatCoordinate(telemetry.position.z)}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', pointerEvents: 'none' }}>
+              <div
+                style={{
+                  ...(CONFIG.PREVIEW as CSSProperties),
+                  width: 190,
+                  height: 190,
+                  color: 'white',
+                  padding: '8px 10px',
+                  boxSizing: 'border-box',
+                  pointerEvents: 'none',
+                }}
+              >
+                <div style={{ fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Current Position</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }}>
+                  <div>X: {formatCoordinate(telemetry.position.x)}</div>
+                  <div>Y: {formatCoordinate(telemetry.position.y)}</div>
+                  <div>Z: {formatCoordinate(telemetry.position.z)}</div>
+                </div>
               </div>
+              <SpacePositionMap position={telemetry.position} size={190} />
             </div>
           )}
         </div>
-        )}
+      )}
 
         {showHeadingCompass && telemetry.headingDeg !== undefined && telemetry.pitchDeg !== undefined && (
           <div
@@ -392,241 +412,305 @@ export default function SpacePage() {
         >
           <div style={{ marginBottom: 10, fontWeight: 700 }}>Performance Tuning</div>
 
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.antialias}
-              onChange={(e) => updatePerformance({ antialias: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            Antialias
-          </label>
+          <details style={{ marginBottom: 10 }}>
+            <summary style={{ cursor: 'pointer' }}>HUD</summary>
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.showHud}
+                  onChange={(e) => updatePerformance({ showHud: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Show HUD
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudCrosshair}
+                  onChange={(e) => updatePerformance({ hudCrosshair: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Crosshair
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudSpeedometer}
+                  onChange={(e) => updatePerformance({ hudSpeedometer: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Speedometer
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudThrottleBar}
+                  onChange={(e) => updatePerformance({ hudThrottleBar: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Throttle Bar
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudPositionPanel}
+                  onChange={(e) => updatePerformance({ hudPositionPanel: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Position Panel
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudHeadingCompass}
+                  onChange={(e) => updatePerformance({ hudHeadingCompass: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Heading Compass
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudTargetPanel}
+                  onChange={(e) => updatePerformance({ hudTargetPanel: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Target Panel
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.hudRangeReadout}
+                  onChange={(e) => updatePerformance({ hudRangeReadout: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Target Readout
+              </label>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                HUD scale ({performanceSettings.hudScale.toFixed(2)})
+                <input
+                  type="range"
+                  min={0.6}
+                  max={1.4}
+                  step={0.05}
+                  value={performanceSettings.hudScale}
+                  onChange={(e) => updatePerformance({ hudScale: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                HUD opacity ({Math.round(performanceSettings.hudOpacity * 100)}%)
+                <input
+                  type="range"
+                  min={35}
+                  max={100}
+                  step={1}
+                  value={Math.round(performanceSettings.hudOpacity * 100)}
+                  onChange={(e) => updatePerformance({ hudOpacity: Number(e.target.value) / 100 })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+            </div>
+          </details>
 
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.showHud}
-              onChange={(e) => updatePerformance({ showHud: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            Show HUD
-          </label>
+          <details style={{ marginBottom: 10 }}>
+            <summary style={{ cursor: 'pointer' }}>Labels</summary>
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Max labels ({performanceSettings.maxVisibleLabels})
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={performanceSettings.maxVisibleLabels}
+                  onChange={(e) => updatePerformance({ maxVisibleLabels: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Label interval ({performanceSettings.labelUpdateIntervalMs}ms)
+                <input
+                  type="range"
+                  min={24}
+                  max={220}
+                  step={8}
+                  value={performanceSettings.labelUpdateIntervalMs}
+                  onChange={(e) => updatePerformance({ labelUpdateIntervalMs: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Label cone scale ({performanceSettings.labelConeScale.toFixed(2)})
+                <input
+                  type="range"
+                  min={55}
+                  max={135}
+                  step={5}
+                  value={Math.round(performanceSettings.labelConeScale * 100)}
+                  onChange={(e) => updatePerformance({ labelConeScale: Number(e.target.value) / 100 })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+            <label style={{ display: 'block', marginBottom: 8 }}>
+                Label font scale ({performanceSettings.labelFontScale.toFixed(2)})
+                <input
+                  type="range"
+                  min={0.5}
+                  max={12.5}
+                  step={0.05}
+                  value={performanceSettings.labelFontScale}
+                  onChange={(e) => updatePerformance({ labelFontScale: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+                <label style={{ display: 'block', marginBottom: 8 }}>
+                  Label X offset ({performanceSettings.labelOffsetX})
+                    <input
+                      type="range"
+                      min={-100}
+                      max={100}
+                      step={1}
+                    value={performanceSettings.labelOffsetX}
+                    onChange={(e) => updatePerformance({ labelOffsetX: Number(e.target.value) })}
+                    style={{ width: '100%' }}
+                  />
+                </label>
+                <label style={{ display: 'block', marginBottom: 10 }}>
+                  Label Y offset ({performanceSettings.labelOffsetY})
+                  <input
+                    type="range"
+                    min={-1000}
+                    max={100}
+                    step={1}
+                    value={performanceSettings.labelOffsetY}
+                    onChange={(e) => updatePerformance({ labelOffsetY: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                Aim sample step ({performanceSettings.aimSampleStep})
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  step={1}
+                  value={performanceSettings.aimSampleStep}
+                  onChange={(e) => updatePerformance({ aimSampleStep: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+            </div>
+          </details>
 
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudCrosshair}
-              onChange={(e) => updatePerformance({ hudCrosshair: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Crosshair
-          </label>
+          <details style={{ marginBottom: 10 }} open>
+            <summary style={{ cursor: 'pointer' }}>Graphics / GPU</summary>
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={performanceSettings.antialias}
+                  onChange={(e) => updatePerformance({ antialias: e.target.checked })}
+                  style={{ marginRight: 6 }}
+                />
+                Antialias
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                DPR ({performanceSettings.dprMin.toFixed(1)} - {performanceSettings.dprMax.toFixed(1)})
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  value={performanceSettings.dprMax}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    updatePerformance({ dprMax: next, dprMin: Math.min(performanceSettings.dprMin, next) });
+                  }}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Background stars ({Math.round(performanceSettings.backgroundStarDensity * 100)}%)
+                <input
+                  type="range"
+                  min={20}
+                  max={100}
+                  step={5}
+                  value={Math.round(performanceSettings.backgroundStarDensity * 100)}
+                  onChange={(e) => updatePerformance({ backgroundStarDensity: Number(e.target.value) / 100 })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Point size ({performanceSettings.backgroundPointSize.toFixed(1)})
+                <input
+                  type="range"
+                  min={1}
+                  max={3.4}
+                  step={0.1}
+                  value={performanceSettings.backgroundPointSize}
+                  onChange={(e) => updatePerformance({ backgroundPointSize: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Star segments ({performanceSettings.starGeometrySegments})
+                <input
+                  type="range"
+                  min={4}
+                  max={16}
+                  step={2}
+                  value={performanceSettings.starGeometrySegments}
+                  onChange={(e) => updatePerformance({ starGeometrySegments: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Grid density ({Math.round((performanceSettings.gridDensity || 0) * 100)}%)
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={10}
+                  value={Math.round((performanceSettings.gridDensity || 0) * 100)}
+                  onChange={(e) => updatePerformance({ gridDensity: Number(e.target.value) / 100 })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+            </div>
+          </details>
 
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudSpeedometer}
-              onChange={(e) => updatePerformance({ hudSpeedometer: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Speedometer
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudPositionPanel}
-              onChange={(e) => updatePerformance({ hudPositionPanel: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Position Panel
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudHeadingCompass}
-              onChange={(e) => updatePerformance({ hudHeadingCompass: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Heading
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudTargetPanel}
-              onChange={(e) => updatePerformance({ hudTargetPanel: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Target Panel
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudThrottleBar}
-              onChange={(e) => updatePerformance({ hudThrottleBar: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Throttle Bar
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={performanceSettings.hudRangeReadout}
-              onChange={(e) => updatePerformance({ hudRangeReadout: e.target.checked })}
-              style={{ marginRight: 6 }}
-            />
-            HUD Range Readout
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            DPR ({performanceSettings.dprMin.toFixed(1)} - {performanceSettings.dprMax.toFixed(1)})
-            <input
-              type="range"
-              min={0.5}
-              max={2}
-              step={0.1}
-              value={performanceSettings.dprMax}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                updatePerformance({ dprMax: next, dprMin: Math.min(performanceSettings.dprMin, next) });
-              }}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Background stars ({Math.round(performanceSettings.backgroundStarDensity * 100)}%)
-            <input
-              type="range"
-              min={20}
-              max={100}
-              step={5}
-              value={Math.round(performanceSettings.backgroundStarDensity * 100)}
-              onChange={(e) => updatePerformance({ backgroundStarDensity: Number(e.target.value) / 100 })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Point size ({performanceSettings.backgroundPointSize.toFixed(1)})
-            <input
-              type="range"
-              min={1}
-              max={3.4}
-              step={0.1}
-              value={performanceSettings.backgroundPointSize}
-              onChange={(e) => updatePerformance({ backgroundPointSize: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Star segments ({performanceSettings.starGeometrySegments})
-            <input
-              type="range"
-              min={4}
-              max={16}
-              step={2}
-              value={performanceSettings.starGeometrySegments}
-              onChange={(e) => updatePerformance({ starGeometrySegments: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Max labels ({performanceSettings.maxVisibleLabels})
-            <input
-              type="range"
-              min={0}
-              max={20}
-              step={1}
-              value={performanceSettings.maxVisibleLabels}
-              onChange={(e) => updatePerformance({ maxVisibleLabels: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Aim sample step ({performanceSettings.aimSampleStep})
-            <input
-              type="range"
-              min={1}
-              max={8}
-              step={1}
-              value={performanceSettings.aimSampleStep}
-              onChange={(e) => updatePerformance({ aimSampleStep: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Label interval ({performanceSettings.labelUpdateIntervalMs}ms)
-            <input
-              type="range"
-              min={24}
-              max={220}
-              step={8}
-              value={performanceSettings.labelUpdateIntervalMs}
-              onChange={(e) => updatePerformance({ labelUpdateIntervalMs: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Label cone scale ({performanceSettings.labelConeScale.toFixed(2)})
-            <input
-              type="range"
-              min={55}
-              max={135}
-              step={5}
-              value={Math.round(performanceSettings.labelConeScale * 100)}
-              onChange={(e) => updatePerformance({ labelConeScale: Number(e.target.value) / 100 })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Grid density ({Math.round((performanceSettings.gridDensity || 0) * 100)}%)
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={10}
-              value={Math.round((performanceSettings.gridDensity || 0) * 100)}
-              onChange={(e) => updatePerformance({ gridDensity: Number(e.target.value) / 100 })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Ship quality ({performanceSettings.shipQuality.toFixed(1)})
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.1}
-              value={performanceSettings.shipQuality}
-              onChange={(e) => updatePerformance({ shipQuality: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 12 }}>
-            Trail count ({performanceSettings.launchTrailLimit})
-            <input
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={performanceSettings.launchTrailLimit}
-              onChange={(e) => updatePerformance({ launchTrailLimit: Number(e.target.value) })}
-              style={{ width: '100%' }}
-            />
-          </label>
+          <details style={{ marginBottom: 10 }}>
+            <summary style={{ cursor: 'pointer' }}>Performance</summary>
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Launch trail ({performanceSettings.launchTrailLimit})
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={performanceSettings.launchTrailLimit}
+                  onChange={(e) => updatePerformance({ launchTrailLimit: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Ship quality ({performanceSettings.shipQuality.toFixed(1)})
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={performanceSettings.shipQuality}
+                  onChange={(e) => updatePerformance({ shipQuality: Number(e.target.value) })}
+                  style={{ width: '100%' }}
+                />
+              </label>
+            </div>
+          </details>
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -643,14 +727,25 @@ export default function SpacePage() {
                   backgroundStarDensity: 0.35,
                   backgroundPointSize: 1.2,
                   starGeometrySegments: 4,
-                  maxVisibleLabels: 0,
-                  labelUpdateIntervalMs: 120,
-                  labelConeScale: 0.75,
+                  maxVisibleLabels: 4,
+                  labelUpdateIntervalMs: 160,
+                  labelConeScale: 0.7,
+                  labelFontScale: 1,
                   aimSampleStep: 3,
                   launchTrailLimit: 2,
                   shipQuality: 0,
-                  gridDensity: 0.15,
+                  gridDensity: 0.2,
                   antialias: false,
+                  showHud: true,
+                  hudScale: 0.9,
+                  hudOpacity: 0.8,
+                  hudCrosshair: true,
+                  hudSpeedometer: true,
+                  hudPositionPanel: false,
+                  hudHeadingCompass: true,
+                  hudTargetPanel: true,
+                  hudThrottleBar: true,
+                  hudRangeReadout: false,
                 })
               }
               style={{ padding: '6px 8px' }}

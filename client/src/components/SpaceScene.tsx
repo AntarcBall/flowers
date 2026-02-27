@@ -79,6 +79,7 @@ const resolveStarColor = (coordColor: string, fallbackColor?: string) => {
 
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 
 const BACKGROUND_STAR_COUNT = 1700;
@@ -136,11 +137,9 @@ export const SpaceScene = ({
 }) => {
   const settings = performance ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS;
   const density = Math.max(0.2, Math.min(1, settings.backgroundStarDensity));
-  const sampleStep = Math.max(1, Math.round(settings.aimSampleStep || 1));
   const maxVisibleLabels = Math.max(0, Math.min(20, Math.round(settings.maxVisibleLabels || 0)));
   const labelsEnabled = maxVisibleLabels > 0;
   const showTargetMarker = settings.showHud && settings.hudTargetPanel;
-  const labelBudgetSeconds = Math.max(0.024, Math.min(0.22, (settings.labelUpdateIntervalMs || 55) / 1000));
   const labelConeScale = Math.max(0.55, Math.min(1.35, settings.labelConeScale || 0.9));
   const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * labelConeScale;
   const labelConeCos = Math.cos(labelConeAngle);
@@ -151,7 +150,12 @@ export const SpaceScene = ({
   const useHighQualityShip = (settings.shipQuality || 0) >= 0.5;
   const showGrid = (settings.gridDensity || 1) >= 0.4;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
-  const labelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
+  const labelFontScale = Math.max(0.5, Math.min(12.5, settings.labelFontScale || 1));
+  const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
+  const labelFontSize = Math.max(10, Math.round(baseLabelFontSize * labelFontScale));
+  const labelOffsetX = clamp(settings.labelOffsetX || 0, -10, 10);
+  const labelOffsetY = clamp(settings.labelOffsetY || 0, -10, 10);
+  const debugEnabled = debugMode;
 
   const toHeadingDeg = (vector: Vector3) => {
     const rawDeg = (Math.atan2(vector.x, vector.z) * 180) / Math.PI;
@@ -161,6 +165,7 @@ export const SpaceScene = ({
   const toPitchDeg = (vector: Vector3) => {
     return (Math.asin(Math.max(-1, Math.min(1, vector.y))) * 180) / Math.PI;
   };
+  const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
 
   const controller = useMemo(() => new SpaceshipController(), []);
   const tpsCamera = useMemo(() => new TPSCamera(), []);
@@ -172,9 +177,8 @@ export const SpaceScene = ({
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
   const aimedStarRef = useRef<number | null>(null);
   const telemetryAccumRef = useRef(0);
-  const labelUpdateAccumRef = useRef(0);
+  const debugAimLogAtRef = useRef(0);
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
-  const labelVisibleKeyRef = useRef('');
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
   const [stars, setStars] = useState<SpaceStar[]>([]);
   const starsRef = useRef<SpaceStar[]>([]);
@@ -182,10 +186,6 @@ export const SpaceScene = ({
   const starGeometry = useMemo(
     () => new SphereGeometry(STAR_MESH_RADIUS, starSegments, starSegments),
     [starSegments],
-  );
-  const renderedStars = useMemo(
-    () => (sampleStep <= 1 ? stars : stars.filter((_, index) => index % sampleStep === 0)),
-    [stars, sampleStep],
   );
 
   const backgroundStars = useMemo(() => {
@@ -239,9 +239,12 @@ export const SpaceScene = ({
           })
         );
         setStars(loadedStars);
+        if (debugEnabled) {
+          console.debug('[SpaceScene] loaded stars', { total: loadedStars.length });
+        }
       })
       .catch((err) => console.error('Failed to load stars:', err));
-  }, []);
+  }, [debugEnabled]);
 
   useFrame((_, delta) => {
     controller.update(delta, inputRef.current);
@@ -276,84 +279,86 @@ export const SpaceScene = ({
     let bestTargetId: number | null = null;
     let bestDist = Infinity;
     let bestTargetDist = Infinity;
-    let fallbackTargetId: number | null = null;
-    let fallbackTargetDist = Infinity;
+    let nearestId: number | null = null;
+    let nearestDist = Infinity;
     const toStar = new Vector3();
+    const visibleIds: number[] = [];
+    const fullStars = starsRef.current;
 
-    for (let i = 0; i < starsRef.current.length; i += 1) {
-      const star = starsRef.current[i];
-      if (sampleStep > 1 && i % sampleStep !== 0) {
-        toStar.subVectors(star.position, controller.position);
-        const dist = toStar.length();
-        if (dist !== 0 && dist < fallbackTargetDist && toStar.normalize().dot(forward) > targetConeCos) {
-          fallbackTargetDist = dist;
-          fallbackTargetId = star.id;
-        }
-        continue;
-      }
-
+    for (let i = 0; i < fullStars.length; i += 1) {
+      const star = fullStars[i];
       toStar.subVectors(star.position, controller.position);
       const dist = toStar.length();
       if (dist === 0) {
         continue;
       }
-      toStar.normalize();
-      const dot = forward.dot(toStar);
 
-      if (dot > targetConeCos && dist < fallbackTargetDist) {
-        fallbackTargetDist = dist;
-        fallbackTargetId = star.id;
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestId = star.id;
       }
+
+      const dir = toStar.normalize();
+      const dot = forward.dot(dir);
 
       if (dot > targetConeCos && dist < bestDist) {
         bestDist = dist;
         bestTargetId = star.id;
         bestTargetDist = dist;
       }
-
-      if (labelsEnabled && dist <= labelConeLength && dot > labelConeCos) {
+      if (dot > labelConeCos && dist <= labelConeLength) {
         insertCandidate(candidates, { id: star.id, dot, dist }, maxVisibleLabels);
       }
     }
 
-    if (bestTargetId === null && fallbackTargetId !== null) {
-      bestTargetId = fallbackTargetId;
-      bestTargetDist = fallbackTargetDist;
+    if (labelsEnabled && candidates.length === 0 && nearestId !== null) {
+      insertCandidate(candidates, { id: nearestId, dot: 1, dist: nearestDist }, maxVisibleLabels);
+    }
+    if (bestTargetId === null && nearestId !== null) {
+      bestTargetId = nearestId;
+      bestTargetDist = nearestDist;
     }
 
-    if (labelsEnabled && candidates.length === 0 && starsRef.current.length > 0) {
-      let nearestId: number | null = null;
-      let nearestDist = Infinity;
-      for (const star of starsRef.current) {
-        const dist = star.position.distanceTo(controller.position);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestId = star.id;
+    for (const candidate of candidates) {
+      visibleIds.push(candidate.id);
+    }
+
+    const nextVisibleIds = new Set<number>(visibleIds);
+    if (labelsEnabled && bestTargetId !== null && !nextVisibleIds.has(bestTargetId)) {
+      nextVisibleIds.add(bestTargetId);
+    }
+
+    let labelsChanged = false;
+    if (nextVisibleIds.size !== labelVisibleStarIds.size) {
+      labelsChanged = true;
+    } else {
+      for (const id of nextVisibleIds) {
+        if (!labelVisibleStarIds.has(id)) {
+          labelsChanged = true;
+          break;
         }
-      }
-      if (nearestId !== null) {
-        insertCandidate(candidates, { id: nearestId, dot: 1, dist: nearestDist }, maxVisibleLabels);
       }
     }
 
     if (labelsEnabled) {
-      const visibleIds = candidates.map((candidate) => candidate.id);
-      const visibleKey = visibleIds.join(',');
-      if (labelUpdateAccumRef.current >= labelBudgetSeconds) {
-        if (visibleKey !== labelVisibleKeyRef.current) {
-          setLabelVisibleStarIds(new Set(visibleIds));
-          labelVisibleKeyRef.current = visibleKey;
-        }
-        labelUpdateAccumRef.current = 0;
-      } else {
-        labelUpdateAccumRef.current += delta;
+      if (labelsChanged) {
+        setLabelVisibleStarIds(nextVisibleIds);
       }
-    } else {
-      if (labelVisibleKeyRef.current !== '') {
-        setLabelVisibleStarIds(new Set());
-        labelVisibleKeyRef.current = '';
-      }
-      labelUpdateAccumRef.current = 0;
+    } else if (labelVisibleStarIds.size !== 0) {
+      setLabelVisibleStarIds(new Set());
+    }
+
+    if (debugEnabled && nowMs() - debugAimLogAtRef.current >= 1000) {
+      console.debug('[SpaceScene] aim/label state', {
+        labelsEnabled,
+        candidateCount: fullStars.length,
+        totalStars: starsRef.current.length,
+        labelVisibleTargetCount: visibleIds.length,
+        aimedStarId: bestTargetId,
+        bestTargetDist: Number.isFinite(bestTargetDist) ? Math.round(bestTargetDist * 1000) / 1000 : null,
+        candidatesReady: candidates.length,
+      });
+      debugAimLogAtRef.current = nowMs();
     }
 
     if (bestTargetId !== aimedStarRef.current) {
@@ -364,7 +369,7 @@ export const SpaceScene = ({
         const star = starsByIdRef.current.get(bestTargetId);
         if (star) {
           const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-          const offset = star.position.clone().sub(controller.position);
+      const offset = star.position.clone().sub(controller.position);
           const headingOffsetDeg = toHeadingDeg(offset);
           onAimChange({
             id: star.id,
@@ -448,31 +453,48 @@ export const SpaceScene = ({
   };
 
   const starLabels = useMemo(() => {
-    if (!labelsEnabled && aimedStarId === null) return [];
+    if (!labelsEnabled) {
+      return [];
+    }
 
     const visibleIds = new Set(labelVisibleStarIds);
     if (aimedStarId !== null) {
       visibleIds.add(aimedStarId);
     }
 
-    return [...visibleIds].map((id) => {
-      const star = starsByIdRef.current.get(id);
-      if (!star) return null;
-      return (
-        <Html
-          key={star.id}
-          position={star.position.toArray()}
-          distanceFactor={1}
-          occlude={false}
-          zIndexRange={[0, 100]}
-        >
-          <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
-            {star.word}
-          </div>
+    const labels = [...visibleIds]
+      .map((id) => {
+        const star = starsByIdRef.current.get(id);
+        if (!star) return null;
+        return (
+          <Html
+            key={star.id}
+            position={star.position.toArray()}
+            distanceFactor={18}
+            occlude={false}
+            zIndexRange={[0, 1000]}
+          >
+              <div
+                style={{
+                  ...(CONFIG.TEXT_STYLE as any),
+                  fontSize: `${labelFontSize}px`,
+                  transform: `translate(${labelOffsetX}px, ${labelOffsetY}px)`,
+                  color: '#f8fcff',
+                  background: 'rgba(5, 16, 26, 0.78)',
+                  padding: '3px 8px',
+                border: '1px solid rgba(136, 205, 255, 0.8)',
+                borderRadius: '6px',
+                boxShadow: '0 0 10px rgba(136, 205, 255, 0.45)',
+              }}
+            >
+              {star.word}
+            </div>
         </Html>
       );
-    });
-  }, [aimedStarId, labelVisibleStarIds, labelFontSize, labelsEnabled]);
+      })
+      .filter((label) => label !== null);
+    return labels;
+  }, [aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
 
   const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
 
@@ -622,7 +644,7 @@ export const SpaceScene = ({
         />
       </points>
 
-      {renderedStars.map((star) => (
+      {stars.map((star) => (
         <mesh
           key={star.id}
           position={star.position.toArray()}

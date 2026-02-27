@@ -21,6 +21,9 @@ export type SpacePerformanceSettings = {
   maxVisibleLabels: number;
   labelUpdateIntervalMs: number;
   labelConeScale: number;
+  labelFontScale: number;
+  labelOffsetX: number;
+  labelOffsetY: number;
   aimSampleStep: number;
   launchTrailLimit: number;
   shipQuality: number;
@@ -48,6 +51,9 @@ export const DEFAULT_SPACE_PERFORMANCE_SETTINGS: SpacePerformanceSettings = {
   maxVisibleLabels: 8,
   labelUpdateIntervalMs: 55,
   labelConeScale: 0.9,
+  labelFontScale: 1,
+  labelOffsetX: 0,
+  labelOffsetY: 0,
   aimSampleStep: 1,
   launchTrailLimit: 6,
   shipQuality: 1,
@@ -106,6 +112,13 @@ export function normalizeSpacePerformanceSettings(
       0.55,
       1.35,
     ),
+    labelFontScale: clamp(
+      input.labelFontScale ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelFontScale,
+      0.5,
+      12.5,
+    ),
+    labelOffsetX: Math.round(clamp(input.labelOffsetX ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetX, -1000, 100)),
+    labelOffsetY: Math.round(clamp(input.labelOffsetY ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetY, -100, 100)),
     aimSampleStep: Math.max(1, Math.round(clamp(
       input.aimSampleStep ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.aimSampleStep,
       1,
