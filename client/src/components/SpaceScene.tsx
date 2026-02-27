@@ -48,6 +48,7 @@ type AimPayload = {
   word: string;
   color: string;
   params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+  embedding: number[];
   distance?: number;
   headingOffsetDeg?: number;
 };
@@ -56,7 +57,43 @@ type SpaceStar = {
   id: number;
   word: string;
   color: string;
+  embedding: number[];
+  params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
   position: Vector3;
+};
+
+type StarEmbeddingParams = ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+
+const buildStarEmbedding = (params: StarEmbeddingParams, position: Vector3, color: string) => {
+  const normalizeParam = (key: string, value: number) => {
+    const range = CONFIG.FLOWER_RANGES[key];
+    if (!range) return 0.5;
+    if (!Number.isFinite(value)) return 0.5;
+    if (range.max === range.min) return 0.5;
+    return clamp01((value - range.min) / (range.max - range.min));
+  };
+
+  const normalizedPos = [
+    clamp01((position.x / CONFIG.CUBE_SIZE + 1) / 2),
+    clamp01((position.y / CONFIG.CUBE_SIZE + 1) / 2),
+    clamp01((position.z / CONFIG.CUBE_SIZE + 1) / 2),
+  ];
+
+  const probeColor = new Color();
+  const parsedColor = (() => {
+    try {
+      probeColor.set(color);
+      return [probeColor.r, probeColor.g, probeColor.b];
+    } catch {
+      return [0, 0, 0];
+    }
+  })();
+
+  const normalizedParams = Object.entries(params)
+    .filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+    .map(([key, value]) => normalizeParam(key, value));
+
+  return [...normalizedPos, ...normalizedParams, ...parsedColor];
 };
   
 const getStarColor = (x: number, y: number, z: number) =>
@@ -82,10 +119,23 @@ const resolveStarColor = (coordColor: string, fallbackColor?: string) => {
   return parseToHex(coordColor) ?? parseToHex(fallbackColor) ?? DEFAULT_STAR_COLOR;
 };
 
+export type SpacePlantHoldState = {
+  active: boolean;
+  progress: number;
+  target: AimPayload | null;
+};
+
+export type SpacePlantHoldEvent = {
+  type: 'start' | 'cancel' | 'complete';
+  target: AimPayload | null;
+};
+
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
+const isSpaceKey = (event: KeyboardEvent) =>
+  event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar';
 
 const BACKGROUND_STAR_COUNT = 1700;
 const BACKGROUND_STAR_RADIUS_MIN = 900;
@@ -94,6 +144,8 @@ const STAR_MESH_RADIUS = 0.95 * 2.4;
 const LABEL_CONE_LENGTH_BASE = 50 * 14;
 const CONE_HEIGHT = 50 * 14;
 const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
+const LABEL_REVEAL_MS = 640;
+const PLANT_HOLD_DURATION_MS = 900;
 
 function insertCandidate(
   candidates: AimCandidate[],
@@ -133,12 +185,18 @@ export const SpaceScene = ({
   onAimChange,
   onTelemetryChange,
   performance,
+  onPlantHold,
+  onPlantHoldEvent,
+  canPlant,
 }: {
   onSelectStar: (data: any) => void;
   debugMode: boolean;
   onAimChange: (data: AimPayload | null) => void;
   onTelemetryChange: (data: Telemetry) => void;
   performance?: SpacePerformanceSettings;
+  onPlantHold?: (state: SpacePlantHoldState) => void;
+  onPlantHoldEvent?: (event: SpacePlantHoldEvent) => void;
+  canPlant?: () => boolean;
 }) => {
   const settings = performance ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS;
   const density = Math.max(0.2, Math.min(1, settings.backgroundStarDensity));
@@ -164,6 +222,21 @@ export const SpaceScene = ({
   const labelOffsetX = clamp(settings.labelOffsetX || 0, -1000, 100);
   const labelOffsetY = clamp(settings.labelOffsetY || 0, -300, 100);
   const debugEnabled = debugMode;
+  const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
+  const labelRevealStartAtRef = useRef(new Map<number, number>());
+  const labelTickRef = useRef(0);
+  const [labelTick, setLabelTick] = useState(0);
+  const plantHoldStartRef = useRef<number | null>(null);
+  const plantHoldTargetIdRef = useRef<number | null>(null);
+  const plantHoldActiveRef = useRef(false);
+  const plantHoldCompletedRef = useRef(false);
+  const debugHoldLogAtRef = useRef(0);
+  const spaceHoldStateRef = useRef<SpacePlantHoldState>({
+    active: false,
+    progress: 0,
+    target: null,
+  });
+  const aimSampleStep = Math.max(1, Math.min(8, Math.round(settings.aimSampleStep || 1)));
 
   const toHeadingDeg = (vector: Vector3) => {
     const rawDeg = (Math.atan2(vector.x, vector.z) * 180) / Math.PI;
@@ -173,7 +246,6 @@ export const SpaceScene = ({
   const toPitchDeg = (vector: Vector3) => {
     return (Math.asin(Math.max(-1, Math.min(1, vector.y))) * 180) / Math.PI;
   };
-  const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
 
   const controller = useMemo(() => new SpaceshipController(), []);
   const tpsCamera = useMemo(() => new TPSCamera(), []);
@@ -239,12 +311,18 @@ export const SpaceScene = ({
       .then((res) => res.json())
       .then((data) => {
         const loadedStars = data.map(
-          (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => ({
-            id: s.id,
-            word: s.word,
-            color: resolveStarColor(getStarColor(s.x, s.y, s.z), s.color),
-            position: new Vector3(s.x, s.y, s.z),
-          })
+          (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => {
+            const params = SemanticMapper.mapCoordinatesToParams(s.x, s.y, s.z);
+            const resolvedColor = resolveStarColor(getStarColor(s.x, s.y, s.z), s.color);
+            return {
+              id: s.id,
+              word: s.word,
+              color: resolvedColor,
+              params,
+              embedding: buildStarEmbedding(params, new Vector3(s.x, s.y, s.z), resolvedColor),
+              position: new Vector3(s.x, s.y, s.z),
+            };
+          }
         );
         setStars(loadedStars);
         if (debugEnabled) {
@@ -298,6 +376,7 @@ export const SpaceScene = ({
     const toStar = new Vector3();
     const visibleIds: number[] = [];
     const fullStars = starsRef.current;
+    const sampleStep = aimSampleStep;
 
     for (let i = 0; i < fullStars.length; i += 1) {
       const star = fullStars[i];
@@ -320,8 +399,16 @@ export const SpaceScene = ({
         bestTargetId = star.id;
         bestTargetDist = dist;
       }
-      if (dot > labelConeCos && dist <= labelConeLength) {
+      if ((i % sampleStep) === 0 && dot > labelConeCos && dist <= labelConeLength) {
         insertCandidate(candidates, { id: star.id, dot, dist }, maxVisibleLabels);
+      }
+    }
+
+    labelTickRef.current += 1;
+    if (labelTickRef.current >= 4) {
+      if (labelTickRef.current >= 4) {
+        labelTickRef.current = 0;
+        setLabelTick((current) => current + 1);
       }
     }
 
@@ -375,68 +462,241 @@ export const SpaceScene = ({
       debugAimLogAtRef.current = nowMs();
     }
 
-    if (bestTargetId !== aimedStarRef.current) {
+    const currentAimedId = bestTargetId;
+
+    if (currentAimedId !== aimedStarRef.current) {
       setAimedStarId(bestTargetId);
       aimedStarRef.current = bestTargetId;
+    }
 
-      if (bestTargetId !== null) {
+    if (currentAimedId !== null) {
+      if (aimedStarRef.current === currentAimedId) {
         const star = starsByIdRef.current.get(bestTargetId);
         if (star) {
-          const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-      const offset = star.position.clone().sub(controller.position);
+          const offset = star.position.clone().sub(controller.position);
           const headingOffsetDeg = toHeadingDeg(offset);
-          onAimChange({
+          const payload: AimPayload = {
             id: star.id,
             color: star.color,
-            params,
+            params: star.params,
+            embedding: star.embedding,
             word: star.word,
             distance: Number.isFinite(bestTargetDist) ? bestTargetDist : undefined,
             headingOffsetDeg,
+          };
+          onAimChange(payload);
+        }
+      }
+      if (plantHoldActiveRef.current && plantHoldTargetIdRef.current !== currentAimedId) {
+        plantHoldActiveRef.current = false;
+        plantHoldCompletedRef.current = false;
+        plantHoldStartRef.current = null;
+        const empty = null;
+        spaceHoldStateRef.current = { active: false, progress: 0, target: empty };
+        if (onPlantHoldEvent) {
+          const target = starsByIdRef.current.get(plantHoldTargetIdRef.current as number);
+          onPlantHoldEvent({
+            type: 'cancel',
+            target: target
+              ? {
+                  id: target.id,
+                  word: target.word,
+                  color: target.color,
+                  params: target.params,
+                  embedding: target.embedding,
+                  distance: undefined,
+                  headingOffsetDeg: toHeadingDeg(target.position.clone().sub(controller.position)),
+                }
+              : null,
           });
         }
-      } else {
-        onAimChange(null);
+        plantHoldTargetIdRef.current = null;
+        onPlantHold?.(spaceHoldStateRef.current);
       }
+    } else if (!currentAimedId) {
+      onAimChange(null);
+      if (plantHoldActiveRef.current) {
+        plantHoldActiveRef.current = false;
+        plantHoldCompletedRef.current = false;
+        plantHoldStartRef.current = null;
+        plantHoldTargetIdRef.current = null;
+        const idle = { active: false, progress: 0, target: null };
+        spaceHoldStateRef.current = idle;
+        if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
+        onPlantHold?.(idle);
+      }
+    }
+
+    const now = nowMs();
+    if (plantHoldActiveRef.current && onPlantHold) {
+      const holdTarget = plantHoldTargetIdRef.current;
+      if (holdTarget !== null) {
+        const elapsed = now - (plantHoldStartRef.current || now);
+        const progress = clamp01(elapsed / PLANT_HOLD_DURATION_MS);
+        const star = starsByIdRef.current.get(holdTarget);
+        if (star) {
+          const dist = star.position.distanceTo(controller.position);
+          const targetPayload: AimPayload = {
+            id: holdTarget,
+            word: star.word,
+            color: star.color,
+            params: star.params,
+            embedding: star.embedding,
+            distance: dist,
+            headingOffsetDeg: toHeadingDeg(star.position.clone().sub(controller.position)),
+          };
+          const nextHoldState: SpacePlantHoldState = { active: true, progress, target: targetPayload };
+          spaceHoldStateRef.current = nextHoldState;
+          onPlantHold(nextHoldState);
+
+          if (progress >= 1 && !plantHoldCompletedRef.current) {
+            const canPlace = canPlant ? canPlant() : true;
+            if (canPlace) {
+              plantHoldCompletedRef.current = true;
+              plantHoldActiveRef.current = false;
+              plantHoldStartRef.current = null;
+              plantHoldTargetIdRef.current = null;
+              spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
+              if (onPlantHoldEvent) onPlantHoldEvent({ type: 'complete', target: targetPayload });
+              selectAimedStar(holdTarget);
+              onPlantHold(spaceHoldStateRef.current);
+            } else {
+              plantHoldCompletedRef.current = false;
+              plantHoldActiveRef.current = false;
+              plantHoldStartRef.current = null;
+              plantHoldTargetIdRef.current = null;
+              spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
+              if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
+              onPlantHold(spaceHoldStateRef.current);
+            }
+          }
+        } else {
+          plantHoldActiveRef.current = false;
+          plantHoldCompletedRef.current = false;
+          plantHoldStartRef.current = null;
+          plantHoldTargetIdRef.current = null;
+          const idle = { active: false, progress: 0, target: null };
+          spaceHoldStateRef.current = idle;
+          if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
+          onPlantHold(idle);
+        }
+      }
+    } else {
+      if (spaceHoldStateRef.current.active !== false || spaceHoldStateRef.current.progress !== 0) {
+        const idle = { active: false, progress: 0, target: null };
+        spaceHoldStateRef.current = idle;
+        onPlantHold?.(idle);
+      }
+    }
+
+    if (debugEnabled && now - debugHoldLogAtRef.current >= 1000) {
+      debugHoldLogAtRef.current = now;
+      console.debug('[SpaceScene] plant-hold state', {
+        holdActive: plantHoldActiveRef.current,
+        holdTargetId: plantHoldTargetIdRef.current,
+        holdProgress: Math.round(spaceHoldStateRef.current.progress * 100),
+      });
     }
   });
 
+  const selectAimedStar = (overrideId?: number | null) => {
+    const currentAimedId = overrideId ?? aimedStarRef.current;
+    if (currentAimedId === null) return;
+
+    const star = starsByIdRef.current.get(currentAimedId);
+    if (!star) return;
+
+    onSelectStar({ color: star.color, params: star.params, word: star.word });
+    if (launchTrailLimit <= 0) return;
+    setLaunchEffects((prev) => {
+      const keepFrom = Math.max(1, launchTrailLimit) - 1;
+      return [...prev.slice(-keepFrom),
+        {
+          id: makeLaunchId(),
+          start: new Vector3().copy(controller.position),
+          target: new Vector3().copy(star.position),
+          elapsed: 0,
+          duration: 1.45,
+        }
+      ];
+    });
+  };
+
   useEffect(() => {
-    const selectAimedStar = () => {
+    const requestPlant = () => {
+      if (canPlant && !canPlant()) {
+        return;
+      }
       const currentAimedId = aimedStarRef.current;
       if (currentAimedId === null) return;
+      if (plantHoldActiveRef.current) return;
 
       const star = starsByIdRef.current.get(currentAimedId);
       if (!star) return;
 
-      const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-      onSelectStar({ color: star.color, params, word: star.word });
-      if (launchTrailLimit <= 0) return;
-      setLaunchEffects((prev) => {
-        const keepFrom = Math.max(1, launchTrailLimit) - 1;
-        return [...prev.slice(-keepFrom),
-          {
-            id: makeLaunchId(),
-            start: new Vector3().copy(controller.position),
-            target: new Vector3().copy(star.position),
-            elapsed: 0,
-            duration: 1.45,
-          }
-        ];
-      });
+      const now = nowMs();
+      plantHoldActiveRef.current = true;
+      plantHoldCompletedRef.current = false;
+      plantHoldStartRef.current = now;
+      plantHoldTargetIdRef.current = currentAimedId;
+      const targetPayload: AimPayload = {
+        id: currentAimedId,
+        word: star.word,
+        color: star.color,
+        params: star.params,
+        embedding: star.embedding,
+      };
+      const initialState: SpacePlantHoldState = { active: true, progress: 0, target: targetPayload };
+      spaceHoldStateRef.current = initialState;
+      onPlantHold?.(initialState);
+      if (onPlantHoldEvent) onPlantHoldEvent({ type: 'start', target: targetPayload });
+      onAimChange(targetPayload);
+    };
+
+    const releasePlant = () => {
+      if (!plantHoldActiveRef.current) return;
+      const target = plantHoldTargetIdRef.current !== null ? starsByIdRef.current.get(plantHoldTargetIdRef.current) : null;
+      const targetPayload = target
+        ? {
+          id: target.id,
+          word: target.word,
+          color: target.color,
+          params: target.params,
+          embedding: target.embedding,
+          distance: target.position.distanceTo(controller.position),
+          headingOffsetDeg: toHeadingDeg(target.position.clone().sub(controller.position)),
+        }
+        : null;
+
+      plantHoldActiveRef.current = false;
+      plantHoldCompletedRef.current = false;
+      plantHoldStartRef.current = null;
+      plantHoldTargetIdRef.current = null;
+      const idle = { active: false, progress: 0, target: null };
+      spaceHoldStateRef.current = idle;
+      onPlantHold?.(idle);
+      if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' && event.key !== ' ') return;
-      if (event.repeat) return;
+      if (!isSpaceKey(event) || event.repeat) return;
       event.preventDefault();
-      selectAimedStar();
+      requestPlant();
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!isSpaceKey(event)) return;
+      event.preventDefault();
+      releasePlant();
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [onSelectStar, controller, launchTrailLimit]);
+  }, [controller, launchTrailLimit, onAimChange, onPlantHold, onPlantHoldEvent, selectAimedStar, canPlant]);
 
   useFrame((_, delta) => {
     if (launchEffects.length === 0) return;
@@ -472,14 +732,49 @@ export const SpaceScene = ({
     }
 
     const visibleIds = new Set(labelVisibleStarIds);
+    const now = nowMs();
+    const revealStartAtById = labelRevealStartAtRef.current;
+    const toRemove: number[] = [];
+    for (const [id, startedAt] of revealStartAtById.entries()) {
+      if (!visibleIds.has(id) && now - startedAt > LABEL_REVEAL_MS * 2) {
+        toRemove.push(id);
+      }
+    }
+    for (const id of toRemove) {
+      revealStartAtById.delete(id);
+    }
+
     if (aimedStarId !== null) {
       visibleIds.add(aimedStarId);
     }
+
+    for (const id of visibleIds) {
+      if (!revealStartAtById.has(id)) {
+        revealStartAtById.set(id, now);
+      }
+    }
+
+    const lodStart = Math.max(1, CONFIG.TEXT_LOD_DISTANCE);
+    const lodEnd = Math.max(lodStart + 160, labelConeLength * 0.94);
 
     const labels = [...visibleIds]
       .map((id) => {
         const star = starsByIdRef.current.get(id);
         if (!star) return null;
+        const dist = star.position.distanceTo(controller.position);
+        const baseLod = 1 - clamp01((dist - lodStart) / (lodEnd - lodStart));
+        const startedAt = revealStartAtById.get(id) || now;
+        const revealProgress = clamp01(
+          startedAt + LABEL_REVEAL_MS > now ? (now - startedAt) / LABEL_REVEAL_MS : 1,
+        );
+        const lodFactor = Math.pow(clamp01(baseLod), 0.8);
+        const opacity = clamp01(lodFactor * (0.3 + 0.7 * Math.pow(revealProgress, 0.7)));
+        const sizeFactor = Math.pow(clamp01(baseLod), 0.55);
+        const finalFontSize = Math.max(labelFontMin, Math.round(labelFontSize * (0.4 + 0.6 * sizeFactor)));
+
+        const isAimed = id === aimedStarId;
+        const revealOpacity = Math.max(0, Math.min(1, opacity));
+        const scale = 0.94 + (isAimed ? 0.12 : 0.08) * lodFactor;
         return (
           <Html
             key={star.id}
@@ -489,15 +784,19 @@ export const SpaceScene = ({
             zIndexRange={[0, 1000]}
           >
               <div
+                className="space-label-ink"
                 style={{
                   ...(CONFIG.TEXT_STYLE as any),
-                  fontSize: `${labelFontSize}px`,
-                  transform: `translate(${labelOffsetX}px, ${labelOffsetY}px)`,
+                  fontSize: `${finalFontSize}px`,
+                  transform: `translate(${labelOffsetX}px, ${labelOffsetY}px) scale(${scale})`,
                   color: '#f8fcff',
                   background: 'rgba(5, 16, 26, 0.78)',
                   padding: '3px 8px',
                 border: '1px solid rgba(136, 205, 255, 0.8)',
                 borderRadius: '6px',
+                  transformOrigin: 'center left',
+                  opacity: revealOpacity,
+                  transition: 'opacity 0.12s linear, transform 0.12s linear',
                 boxShadow: '0 0 10px rgba(136, 205, 255, 0.45)',
               }}
             >
@@ -508,7 +807,7 @@ export const SpaceScene = ({
       })
       .filter((label) => label !== null);
     return labels;
-  }, [aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
+    }, [labelTick, aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
 
   const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
 

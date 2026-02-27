@@ -16,10 +16,55 @@ body {
   display: block;
 }
 
-html body > div > div:nth-child(2) > div:nth-child(5) > div:nth-child(2) > div:nth-child(1) {
-  display: none !important;
+.space-label-ink {
+  animation: space-label-ink-reveal 0.68s cubic-bezier(0.21, 0.61, 0.35, 1);
+  animation-fill-mode: both;
+  will-change: opacity, filter;
 }
 
-html body > div > div:nth-child(2) > div:nth-child(4) {
-  display: none !important;
+.prologue-screen {
+  background: radial-gradient(circle at 20% 12%, rgba(120, 160, 230, 0.14), transparent 22%),
+    radial-gradient(circle at 78% 82%, rgba(180, 240, 255, 0.08), transparent 24%),
+    linear-gradient(160deg, rgba(7, 12, 26, 0.94), rgba(1, 2, 10, 0.98));
+  overflow: hidden;
+}
+
+.prologue-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  opacity: 0.18;
+  mix-blend-mode: screen;
+  background-size: 3px 3px;
+  animation: prologue-film 6s linear infinite;
+}
+
+@keyframes prologue-film {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(3px);
+  }
+}
+
+@keyframes space-label-ink-reveal {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+  }
 }
