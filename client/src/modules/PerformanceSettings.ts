@@ -133,7 +133,11 @@ export function normalizeSpacePerformanceSettings(
       0.5,
       30,
     ),
-    labelFontMin: clamp(Math.round(input.labelFontMin ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelFontMin), 1, 30),
+    labelFontMin: clamp(
+      Math.round(input.labelFontMin ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelFontMin),
+      1,
+      75,
+    ),
     labelOffsetX: Math.round(clamp(input.labelOffsetX ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetX, -1000, 100)),
     labelOffsetY: Math.round(clamp(input.labelOffsetY ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetY, -300, 100)),
     aimSampleStep: Math.max(1, Math.round(clamp(

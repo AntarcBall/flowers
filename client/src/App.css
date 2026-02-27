@@ -15,3 +15,7 @@ body {
   overflow: hidden;
   display: block;
 }
+
+html body > div > div:nth-child(2) > div:nth-child(5) > div:nth-child(2) > div:nth-child(1) {
+  display: none !important;
+}
