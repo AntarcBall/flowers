@@ -9,15 +9,17 @@ import { v4 as uuidv4 } from 'uuid';
 const FLOWER_VISUAL_RADIUS = 104;
 const FLOWER_LABEL_GROWTH_MARGIN = 4;
 const LABEL_EDGE_GUARD = 10;
-const LABEL_FLAT_GAP = 8;
+const LABEL_FLAT_GAP = 10;
 const LABEL_TRIES_PER_RING = 26;
 const LABEL_RING_FACTORS = [1.03, 1.08, 1.15, 1.24, 1.34];
-const LABEL_TEXT_PADDING = 4;
+const LABEL_TEXT_PADDING = 6;
 const LABEL_ORBIT_SCALE = 0.6;
 const FLOWER_SPAWN_MARGIN = 20;
 const FLOWER_MIN_SEPARATION = 100;
 const FLOWER_TRIES_PER_RING = 22;
 const FLOWER_RING_FACTORS = [1.0, 1.2, 1.4, 1.75, 2.1];
+const FLOWER_HITBOX_SCALE = 1.4;
+const LABEL_COLLISION_GAIN = 1.45;
 const MIN_LIFESPAN_MS = 30 * 1000;
 const MIN_WITHERING_MS = 5000;
 
@@ -126,7 +128,24 @@ export class GardenManager {
   }
 
   private estimateLabelRadius(word: string) {
-    return Math.min(120, 54 + word.length * 4.1);
+    const chars = Math.max(1, [...word].length);
+    const base = 42 + 4.8 * chars + Math.sqrt(chars) * 18;
+    return Math.max(48, Math.min(220, Math.round(base)));
+  }
+
+  private resolveLabelRadius(word: string) {
+    return this.estimateLabelRadius(word);
+  }
+
+  private resolveFlowerHitboxRadius(flower: FlowerData) {
+    const baseRadius = FLOWER_VISUAL_RADIUS * FLOWER_HITBOX_SCALE;
+    const orbitLabelRadius = this.resolveLabelRadius(flower.word || '');
+    const labelOffsetDistance = Math.sqrt(
+      Math.pow(flower.labelOffsetX || 0, 2) + Math.pow(flower.labelOffsetY || 0, 2),
+    );
+    const labelOrbitRadius = labelOffsetDistance + (flower.labelRadius ?? orbitLabelRadius);
+
+    return Math.max(baseRadius, labelOrbitRadius + LABEL_FLAT_GAP, LABEL_TEXT_PADDING);
   }
 
   private distanceSq(ax: number, ay: number, bx: number, by: number) {
@@ -209,14 +228,12 @@ export class GardenManager {
     placementRadius: number,
     placed: FlowerData[],
   ) {
-    const minClearSq =
-      Math.pow(FLOWER_VISUAL_RADIUS + placementRadius + FLOWER_LABEL_GROWTH_MARGIN, 2);
-
     for (const flower of placed) {
-      if (
-        this.distanceSq(centerX, centerY, flower.x, flower.y) <
-        minClearSq
-      ) {
+      const flowerRadius = this.resolveFlowerHitboxRadius(flower);
+      const clearRadius =
+        (flowerRadius + placementRadius) * LABEL_COLLISION_GAIN + FLOWER_LABEL_GROWTH_MARGIN * LABEL_COLLISION_GAIN;
+
+      if (this.distanceSq(centerX, centerY, flower.x, flower.y) < clearRadius * clearRadius) {
         return false;
       }
 
@@ -227,8 +244,14 @@ export class GardenManager {
       ) {
         const existingLabelX = flower.x + flower.labelOffsetX;
         const existingLabelY = flower.y + flower.labelOffsetY;
+        const existingLabelRadius = this.resolveLabelRadius(flower.word || '');
         const requiredSq =
-          Math.pow(placementRadius + flower.labelRadius + LABEL_FLAT_GAP, 2);
+          Math.pow(
+            placementRadius +
+              (flower.labelRadius ?? existingLabelRadius) +
+              LABEL_FLAT_GAP * LABEL_COLLISION_GAIN,
+            2,
+          );
         if (this.distanceSq(centerX, centerY, existingLabelX, existingLabelY) < requiredSq) {
           return false;
         }
@@ -299,7 +322,7 @@ export class GardenManager {
     const normalized: FlowerData[] = [];
     for (const flower of rawFlowers) {
       const word = flower.word || 'Unknown Bloom';
-      const labelRadius = this.estimateLabelRadius(word);
+      const labelRadius = this.resolveLabelRadius(word);
       const { offsetX, offsetY } = this.resolveLabelPlacement(
         flower.x,
         flower.y,
@@ -376,7 +399,7 @@ export class GardenManager {
     const resolved = this.resolveFlowerPlacement(x, y, this.flowers);
     const normalizedParams = normalizeFlowerParams(this.selectedStarData.params);
     const word = this.selectedStarData.word || 'Unknown Bloom';
-    const labelRadius = this.estimateLabelRadius(word);
+    const labelRadius = this.resolveLabelRadius(word);
     const { x: resolvedX, y: resolvedY } = resolved;
     const { offsetX, offsetY } = this.resolveLabelPlacement(resolvedX, resolvedY, labelRadius, this.flowers);
 

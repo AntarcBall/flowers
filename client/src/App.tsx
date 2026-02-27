@@ -258,8 +258,8 @@ export default function App() {
     <div
       style={{
         position: 'absolute',
-        top: 22,
-        left: 20,
+        top: 20,
+        right: 20,
         color: '#eaf6ff',
         fontSize: 13,
         lineHeight: 1.6,
@@ -272,8 +272,6 @@ export default function App() {
         maxWidth: 280,
       }}
     >
-      <div>WASD/마우스: 항해 조작</div>
-      <div>조준 + Space: 심기</div>
       <div>
         남은 심기: {seedState.remaining} / {seedState.total}
       </div>
@@ -282,16 +280,18 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: 'black' }}>
-      <SpacePage
-        key={voyageEpoch}
-        initialSeedLimit={seedLimit}
-        onSeedStateChange={handleSeedStateChange}
-        onSeedCommit={handleSeedCommit}
-        onAimChange={handleAimChange}
-        onPlantHoldEvent={handlePlantHoldEvent}
-        onPlantBlocked={handlePlantBlocked}
-        canPlant={canPlant}
-      />
+      {phase === 'flight' && (
+        <SpacePage
+          key={voyageEpoch}
+          initialSeedLimit={seedLimit}
+          onSeedStateChange={handleSeedStateChange}
+          onSeedCommit={handleSeedCommit}
+          onAimChange={handleAimChange}
+          onPlantHoldEvent={handlePlantHoldEvent}
+          onPlantBlocked={handlePlantBlocked}
+          canPlant={canPlant}
+        />
+      )}
 
       {phase === 'prologue' && (
         <div
@@ -317,6 +317,19 @@ export default function App() {
                 {line}
               </div>
             ))}
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gap: 4,
+              textAlign: 'center',
+              opacity: 0.92,
+              lineHeight: 1.35,
+              fontSize: 14,
+            }}
+          >
+            <div>WASD/마우스: 항해 조작</div>
+            <div>조준 + Space: 심기</div>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
             <button onClick={startFlight} style={{ minWidth: 140, fontWeight: 700 }}>

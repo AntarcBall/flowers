@@ -242,13 +242,6 @@ export default function SpacePage({
           pointerEvents: 'none',
         }}
       >
-        {showHud && (
-          <div style={{ position: 'absolute', top: 20, left: 20, color: 'white', fontSize: 12, lineHeight: 1.4 }}>
-            <div>WASD/마우스: 항해 조작</div>
-            <div>남은 심기: {seedState.remaining}/{seedState.total}</div>
-          </div>
-        )}
-
         {seedBlocked && (
           <div
             style={{
@@ -450,31 +443,39 @@ export default function SpacePage({
               <FlowerPreview params={aimedStarData.params} color={aimedStarData.color} size={120} />
             </div>
             <div style={{ padding: '0 5px 6px' }}>
-              <div style={{ marginBottom: 4, fontSize: 10, color: '#c6e3ff', opacity: 0.9 }}>임베딩 스펙트럼</div>
-              <div
-                style={{
-                  display: 'grid',
-                gridTemplateColumns: `repeat(${EMBEDDING_PALETTE_SEGMENTS}, minmax(0, 1fr))`,
-                gridTemplateColumns: `repeat(${Math.max(1, buildEmbeddingBars(aimedStarData.embedding).length)}, minmax(0, 1fr))`,
-                  gap: 2,
-                  height: 12,
-                  alignItems: 'stretch',
-                }}
-              >
-                {buildEmbeddingBars(aimedStarData.embedding).map((segment, segmentIndex) => (
-                  <div
-                    key={`${aimedStarData.word}-${segmentIndex}`}
-                    style={{
-                      height: 12,
-                      background: segment.color,
-                      opacity: 0.55 + segment.value * 0.45,
-                      borderRadius: 2,
-                      boxShadow: `inset 0 0 0 1px rgba(255,255,255,${0.18 + segment.value * 0.4})`,
-                    }}
-                    title={`embedding ${segmentIndex + 1}: ${segment.value.toFixed(3)}`}
-                  />
-                ))}
-              </div>
+              {(() => {
+                const bars = buildEmbeddingBars(aimedStarData.embedding);
+                return (
+                  <>
+                    <div style={{ marginBottom: 4, fontSize: 10, color: '#c6e3ff', opacity: 0.9 }}>
+                      임베딩 스펙트럼 ({bars.length}D)
+                    </div>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${Math.max(1, bars.length)}, minmax(0, 1fr))`,
+                        gap: 2,
+                        height: 12,
+                        alignItems: 'stretch',
+                      }}
+                    >
+                      {bars.map((segment, segmentIndex) => (
+                        <div
+                          key={`${aimedStarData.word}-${segmentIndex}`}
+                          style={{
+                            height: 12,
+                            background: segment.color,
+                            opacity: 0.55 + segment.value * 0.45,
+                            borderRadius: 2,
+                            boxShadow: `inset 0 0 0 1px rgba(255,255,255,${0.18 + segment.value * 0.4})`,
+                          }}
+                          title={`embedding ${segmentIndex + 1}: ${segment.value.toFixed(3)}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
             {showRangeReadout && aimedStarData.distance !== undefined && (
               <div style={{ padding: '4px 8px', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.22)' }}>
@@ -494,6 +495,7 @@ export default function SpacePage({
               color: 'white',
               pointerEvents: 'none',
               ...CONFIG.PREVIEW,
+              overflow: 'hidden',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: 8 }}>
@@ -713,7 +715,6 @@ export default function SpacePage({
     </div>
   );
 }
-
 
 
 

@@ -108,6 +108,8 @@ function toPoints(points: Point2D[]) {
 }
 
 const SPEED_ARROW_SCALE = 0.9;
+const CUBE_RELATIVE_DRIFT = 0.28;
+const MAP_Y_LIFT = -44;
 
 export function SpacePositionMap({
   position,
@@ -115,7 +117,7 @@ export function SpacePositionMap({
   size = 190,
 }: SpacePositionMapProps) {
   const cx = size / 2;
-  const cy = size / 2;
+  const cy = size / 2 + MAP_Y_LIFT;
   const margin = size * 0.09;
   const mapSpan = Math.max(
     TRACKING_SPAN_TARGET,
@@ -137,8 +139,34 @@ export function SpacePositionMap({
     y: point.y * cubeScale,
     z: point.z * cubeScale,
   });
-  const rotatedVertices = CUBE_VERTICES.map((vertex) => rotateCubeForMap(toModel(vertex)));
-  const projectedVertices = rotatedVertices.map((vertex) => toOrthographicProjection(vertex, cx, cy, 1));
+  const relativeDrift = {
+    x: -worldToCube.x * CUBE_HALF * CUBE_RELATIVE_DRIFT,
+    y: -worldToCube.y * CUBE_HALF * CUBE_RELATIVE_DRIFT,
+    z: -worldToCube.z * CUBE_HALF * CUBE_RELATIVE_DRIFT,
+  };
+  const shiftedVertices = CUBE_VERTICES.map((vertex) =>
+    rotateCubeForMap(
+      toModel({
+        x: vertex.x + relativeDrift.x,
+        y: vertex.y + relativeDrift.y,
+        z: vertex.z + relativeDrift.z,
+      }),
+    ),
+  );
+  const projectedShiftedVertices = shiftedVertices.map((vertex) => toOrthographicProjection(vertex, cx, cy, 1));
+  const activeVertices = projectedShiftedVertices;
+  const spawn = toOrthographicProjection(
+    rotateCubeForMap(
+      toModel({
+        x: relativeDrift.x,
+        y: relativeDrift.y,
+        z: relativeDrift.z,
+      }),
+    ),
+    cx,
+    cy,
+    1,
+  );
   const ship = toOrthographicProjection(
     rotateCubeForMap(
       toModel({
@@ -183,29 +211,37 @@ export function SpacePositionMap({
     Math.pow(velocity.x, 2) + Math.pow(velocity.y, 2) + Math.pow(velocity.z, 2),
   );
   const hasVelocity = velocityMagnitude > 0.0001;
-  const spawn = toOrthographicProjection(rotateCubeForMap(toModel({ x: 0, y: 0, z: 0 })), cx, cy, 1);
 
   const contour = [
-    projectedVertices[0],
-    projectedVertices[1],
-    projectedVertices[2],
-    projectedVertices[3],
-    projectedVertices[7],
-    projectedVertices[4],
+    activeVertices[0],
+    activeVertices[1],
+    activeVertices[2],
+    activeVertices[3],
+    activeVertices[7],
+    activeVertices[4],
   ];
 
   return (
     <div
       style={{
         width: size,
+        maxWidth: size,
+        overflow: 'hidden',
+        borderRadius: 3,
         color: '#e3f3ff',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         gap: 6,
+        lineHeight: 0,
       }}
     >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        style={{ width: size, height: size, display: 'block', overflow: 'hidden' }}
+      >
         <defs>
           <linearGradient id="gpsOutlineGlow" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="rgba(170, 232, 255, 0.22)" />
@@ -226,81 +262,81 @@ export function SpacePositionMap({
         />
 
         <line
-          x1={projectedVertices[0].x}
-          y1={projectedVertices[0].y}
-          x2={projectedVertices[1].x}
-          y2={projectedVertices[1].y}
+          x1={activeVertices[0].x}
+          y1={activeVertices[0].y}
+          x2={activeVertices[1].x}
+          y2={activeVertices[1].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
           strokeLinejoin="round"
         />
         <line
-          x1={projectedVertices[1].x}
-          y1={projectedVertices[1].y}
-          x2={projectedVertices[2].x}
-          y2={projectedVertices[2].y}
+          x1={activeVertices[1].x}
+          y1={activeVertices[1].y}
+          x2={activeVertices[2].x}
+          y2={activeVertices[2].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
         <line
-          x1={projectedVertices[2].x}
-          y1={projectedVertices[2].y}
-          x2={projectedVertices[3].x}
-          y2={projectedVertices[3].y}
+          x1={activeVertices[2].x}
+          y1={activeVertices[2].y}
+          x2={activeVertices[3].x}
+          y2={activeVertices[3].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
         <line
-          x1={projectedVertices[3].x}
-          y1={projectedVertices[3].y}
-          x2={projectedVertices[0].x}
-          y2={projectedVertices[0].y}
+          x1={activeVertices[3].x}
+          y1={activeVertices[3].y}
+          x2={activeVertices[0].x}
+          y2={activeVertices[0].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
 
         <line
-          x1={projectedVertices[5].x}
-          y1={projectedVertices[5].y}
-          x2={projectedVertices[6].x}
-          y2={projectedVertices[6].y}
+          x1={activeVertices[5].x}
+          y1={activeVertices[5].y}
+          x2={activeVertices[6].x}
+          y2={activeVertices[6].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
         <line
-          x1={projectedVertices[6].x}
-          y1={projectedVertices[6].y}
-          x2={projectedVertices[7].x}
-          y2={projectedVertices[7].y}
+          x1={activeVertices[6].x}
+          y1={activeVertices[6].y}
+          x2={activeVertices[7].x}
+          y2={activeVertices[7].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
         <line
-          x1={projectedVertices[7].x}
-          y1={projectedVertices[7].y}
-          x2={projectedVertices[4].x}
-          y2={projectedVertices[4].y}
+          x1={activeVertices[7].x}
+          y1={activeVertices[7].y}
+          x2={activeVertices[4].x}
+          y2={activeVertices[4].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
         <line
-          x1={projectedVertices[4].x}
-          y1={projectedVertices[4].y}
-          x2={projectedVertices[5].x}
-          y2={projectedVertices[5].y}
+          x1={activeVertices[4].x}
+          y1={activeVertices[4].y}
+          x2={activeVertices[5].x}
+          y2={activeVertices[5].y}
           stroke="rgba(170, 236, 255, 0.92)"
           strokeWidth="1.4"
         />
 
         {CUBE_EDGES.map(([a, b]) => {
-          const isFront = (rotatedVertices[a].z + rotatedVertices[b].z) / 2 >= 0;
+          const isFront = (shiftedVertices[a].z + shiftedVertices[b].z) / 2 >= 0;
           return (
             <line
               key={`cube-edge-${a}-${b}`}
-              x1={projectedVertices[a].x}
-              y1={projectedVertices[a].y}
-              x2={projectedVertices[b].x}
-              y2={projectedVertices[b].y}
+              x1={activeVertices[a].x}
+              y1={activeVertices[a].y}
+              x2={activeVertices[b].x}
+              y2={activeVertices[b].y}
               stroke={isFront ? 'rgba(215, 244, 255, 0.9)' : 'rgba(120, 180, 230, 0.22)'}
               strokeWidth={isFront ? 1.05 : 0.82}
               strokeDasharray={isFront ? undefined : '3 4'}
@@ -312,10 +348,10 @@ export function SpacePositionMap({
         {CUBE_ORTHO_EDGE_FACES.map(([a, b], i) => (
           <line
             key={`front-slice-${i}`}
-            x1={projectedVertices[a].x}
-            y1={projectedVertices[a].y}
-            x2={projectedVertices[b].x}
-            y2={projectedVertices[b].y}
+            x1={activeVertices[a].x}
+            y1={activeVertices[a].y}
+            x2={activeVertices[b].x}
+            y2={activeVertices[b].y}
             stroke="rgba(255, 255, 255, 0.4)"
             strokeWidth="0.7"
             strokeDasharray="2 3"

@@ -146,6 +146,8 @@ const CONE_HEIGHT = 50 * 14;
 const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
 const LABEL_REVEAL_MS = 640;
 const PLANT_HOLD_DURATION_MS = 900;
+const SPACE_AIMING_SPEED_SCALE = 0.7;
+const LAUNCH_GUIDE_OFFSET = new Vector3(0, 0.05, -1.62);
 
 function insertCandidate(
   candidates: AimCandidate[],
@@ -230,6 +232,7 @@ export const SpaceScene = ({
   const plantHoldTargetIdRef = useRef<number | null>(null);
   const plantHoldActiveRef = useRef(false);
   const plantHoldCompletedRef = useRef(false);
+  const spaceHoldKeyRef = useRef(false);
   const debugHoldLogAtRef = useRef(0);
   const spaceHoldStateRef = useRef<SpacePlantHoldState>({
     active: false,
@@ -333,7 +336,9 @@ export const SpaceScene = ({
   }, [debugEnabled]);
 
   useFrame((_, delta) => {
-    controller.update(delta, inputRef.current);
+    const isAimingSlowdown = aimedStarRef.current !== null && spaceHoldKeyRef.current;
+    const moveSpeedScale = isAimingSlowdown ? SPACE_AIMING_SPEED_SCALE : 1;
+    controller.update(delta, inputRef.current, moveSpeedScale);
     if (shipRef.current) {
       shipRef.current.position.copy(controller.position);
       shipRef.current.quaternion.copy(controller.quaternion);
@@ -343,10 +348,11 @@ export const SpaceScene = ({
     }
     tpsCamera.update(camera as PerspectiveCamera, controller, delta);
     const forward = controller.getForwardVector();
+    const appliedSpeed = controller.speed * moveSpeedScale;
     const velocity = {
-      x: forward.x * controller.speed,
-      y: forward.y * controller.speed,
-      z: forward.z * controller.speed,
+      x: forward.x * appliedSpeed,
+      y: forward.y * appliedSpeed,
+      z: forward.z * appliedSpeed,
     };
 
     telemetryAccumRef.current += delta;
@@ -354,7 +360,7 @@ export const SpaceScene = ({
       const headingDeg = toHeadingDeg(forward);
       const pitchDeg = toPitchDeg(forward);
       onTelemetryChange({
-        speed: controller.speed,
+        speed: appliedSpeed,
         position: {
           x: controller.position.x,
           y: controller.position.y,
@@ -680,12 +686,14 @@ export const SpaceScene = ({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isSpaceKey(event) || event.repeat) return;
+      spaceHoldKeyRef.current = true;
       event.preventDefault();
       requestPlant();
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
       if (!isSpaceKey(event)) return;
+      spaceHoldKeyRef.current = false;
       event.preventDefault();
       releasePlant();
     };
@@ -695,6 +703,7 @@ export const SpaceScene = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      spaceHoldKeyRef.current = false;
     };
   }, [controller, launchTrailLimit, onAimChange, onPlantHold, onPlantHoldEvent, selectAimedStar, canPlant]);
 
@@ -810,6 +819,10 @@ export const SpaceScene = ({
     }, [labelTick, aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
 
   const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
+  const launchGuideStart = shipRef.current
+    ? shipRef.current.localToWorld(LAUNCH_GUIDE_OFFSET.clone())
+    : controller.position.clone();
+  const showLaunchGuide = spaceHoldKeyRef.current && aimedStar !== null;
 
   return (
     <>
@@ -976,6 +989,28 @@ export const SpaceScene = ({
             <meshBasicMaterial color="white" />
           </mesh>
         </group>
+      )}
+
+      {showLaunchGuide && aimedStar && (
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[
+                new Float32Array([
+                  launchGuideStart.x,
+                  launchGuideStart.y,
+                  launchGuideStart.z,
+                  aimedStar.position.x,
+                  aimedStar.position.y,
+                  aimedStar.position.z,
+                ]),
+                3,
+              ]}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#82f4ff" transparent opacity={0.78} />
+        </line>
       )}
 
       {launchEffects.map((effect) => {

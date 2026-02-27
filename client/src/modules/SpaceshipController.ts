@@ -13,7 +13,11 @@ export class SpaceshipController {
   private readonly yawQuaternion = new Quaternion();
   private readonly forwardVector = new Vector3();
 
-  update(deltaTime: number, inputState: Record<string, boolean>): boolean {
+  update(
+    deltaTime: number,
+    inputState: Record<string, boolean>,
+    speedScale = 1,
+  ): boolean {
     const { MAX_SPEED, ACCEL_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
     const isThrottleInput = inputState['q'] || inputState['Q'] || inputState['e'] || inputState['E'];
 
@@ -44,7 +48,8 @@ export class SpaceshipController {
     this.quaternion.multiply(this.pitchQuaternion);
 
     const forwardVector = this.getForwardVector();
-    this.position.addScaledVector(forwardVector, this.speed * deltaTime);
+    const effectiveSpeed = this.speed * speedScale;
+    this.position.addScaledVector(forwardVector, effectiveSpeed * deltaTime);
 
     let warped = false;
     if (Math.abs(this.position.x) > CUBE_SIZE || 
