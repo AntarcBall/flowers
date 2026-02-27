@@ -107,17 +107,12 @@ function toPoints(points: Point2D[]) {
   return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
 }
 
-function pointDistance(a: Point3D, b: Point3D) {
-  return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2) + Math.pow(a.z - b.z, 2));
-}
-
 const SPEED_ARROW_SCALE = 0.9;
 
 export function SpacePositionMap({
   position,
   velocity = { x: 0, y: 0, z: 0 },
   size = 190,
-  title = 'Current Position',
 }: SpacePositionMapProps) {
   const cx = size / 2;
   const cy = size / 2;
@@ -190,24 +185,6 @@ export function SpacePositionMap({
   const hasVelocity = velocityMagnitude > 0.0001;
   const spawn = toOrthographicProjection(rotateCubeForMap(toModel({ x: 0, y: 0, z: 0 })), cx, cy, 1);
 
-  const worldDistance = Math.sqrt(
-    Math.pow(position.x - SPAWN_POINT.x, 2) +
-      Math.pow(position.y - SPAWN_POINT.y, 2) +
-      Math.pow(position.z - SPAWN_POINT.z, 2),
-  ).toFixed(1);
-  const axisX = pointDistance(
-    { x: worldToCube.x, y: worldToCube.y, z: worldToCube.z },
-    { x: 0, y: worldToCube.y, z: worldToCube.z },
-  );
-  const axisY = pointDistance(
-    { x: worldToCube.x, y: worldToCube.y, z: worldToCube.z },
-    { x: worldToCube.x, y: 0, z: worldToCube.z },
-  );
-  const axisZ = pointDistance(
-    { x: worldToCube.x, y: worldToCube.y, z: worldToCube.z },
-    { x: worldToCube.x, y: worldToCube.y, z: 0 },
-  );
-
   const contour = [
     projectedVertices[0],
     projectedVertices[1],
@@ -228,19 +205,6 @@ export function SpacePositionMap({
         gap: 6,
       }}
     >
-      <div
-        style={{
-          fontSize: 11,
-          letterSpacing: 0.5,
-          color: 'rgba(227, 243, 255, 0.93)',
-          marginBottom: 2,
-          textAlign: 'center',
-          textTransform: 'uppercase',
-        }}
-      >
-        {title}
-      </div>
-
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <defs>
           <linearGradient id="gpsOutlineGlow" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -439,26 +403,6 @@ export function SpacePositionMap({
         <circle cx={ship.x} cy={ship.y} r={3.4} fill="#ffd36a" />
       </svg>
 
-        <div style={{ width: '100%', fontFamily: 'monospace', fontSize: 10, lineHeight: 1.45, opacity: 0.94 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-          <span>dx:{worldToCube.x.toFixed(2)}</span>
-          <span>dy:{worldToCube.y.toFixed(2)}</span>
-          <span>dz:{worldToCube.z.toFixed(2)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-          <span>vx:{velocity.x.toFixed(2)}</span>
-          <span>vy:{velocity.y.toFixed(2)}</span>
-          <span>vz:{velocity.z.toFixed(2)}</span>
-        </div>
-        <div>
-          abs: x {worldToCube.x.toFixed(3)} y {worldToCube.y.toFixed(3)} z {worldToCube.z.toFixed(3)}
-        </div>
-        <div>
-          axis bias: X {axisX.toFixed(2)} Y {axisY.toFixed(2)} Z {axisZ.toFixed(2)}
-        </div>
-        <div>Distance: {worldDistance}m</div>
-        <div>Velocity: {hasVelocity ? `${velocityMagnitude.toFixed(2)}m/s` : '0.00m/s'}</div>
-      </div>
     </div>
   );
 }

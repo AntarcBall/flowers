@@ -14,7 +14,11 @@ import {
 } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
-import { DEFAULT_SPACE_PERFORMANCE_SETTINGS, type SpacePerformanceSettings } from '../modules/PerformanceSettings';
+import {
+  DEFAULT_SPACE_PERFORMANCE_SETTINGS,
+  type SpacePerformanceSettings,
+  LABEL_FONT_MIN_MAX,
+} from '../modules/PerformanceSettings';
 import { CONFIG } from '../config';
 
 type Telemetry = {
@@ -154,7 +158,7 @@ export const SpaceScene = ({
   const showGrid = (settings.gridDensity || 1) >= 0.4;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
   const labelFontScale = Math.max(0.5, Math.min(30, settings.labelFontScale || 1));
-  const labelFontMin = Math.max(1, Math.min(30, Math.round(settings.labelFontMin || 10)));
+  const labelFontMin = Math.max(1, Math.min(LABEL_FONT_MIN_MAX, Math.round(settings.labelFontMin || 10)));
   const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
   const labelFontSize = Math.max(labelFontMin, Math.round(baseLabelFontSize * labelFontScale));
   const labelOffsetX = clamp(settings.labelOffsetX || 0, -1000, 100);

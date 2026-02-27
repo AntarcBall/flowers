@@ -33,6 +33,8 @@ export type SpacePerformanceSettings = {
   gridDensity: number;
 };
 
+export const LABEL_FONT_MIN_MAX = 750;
+
 export const DEFAULT_SPACE_PERFORMANCE_SETTINGS: SpacePerformanceSettings = {
   enabled: true,
   dprMin: 1.0,
@@ -136,7 +138,7 @@ export function normalizeSpacePerformanceSettings(
     labelFontMin: clamp(
       Math.round(input.labelFontMin ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelFontMin),
       1,
-      75,
+      LABEL_FONT_MIN_MAX,
     ),
     labelOffsetX: Math.round(clamp(input.labelOffsetX ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetX, -1000, 100)),
     labelOffsetY: Math.round(clamp(input.labelOffsetY ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetY, -300, 100)),
