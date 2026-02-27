@@ -115,6 +115,11 @@ export default function SpacePage({
   const [seedBlocked, setSeedBlocked] = useState(false);
   const plantedCommitGuardRef = useRef<Map<string, number>>(new Map());
   const PLANT_DUP_WINDOW_MS = 1200;
+  const usedSeedsRef = useRef(0);
+  const PLANT_LOCK_WINDOW_MS = 900;
+  const globalPlantLockUntilRef = useRef(0);
+  const committedWordGuardRef = useRef<Map<string, number>>(new Map());
+  const COMMITTED_WORD_WINDOW_MS = 1200;
 
   const makePlantCommitKey = (data: StarSelectionData) =>
     data.id !== undefined
@@ -132,6 +137,10 @@ export default function SpacePage({
   useEffect(() => {
     onSeedStateChange?.(seedState);
   }, [seedState.used, seedState.remaining, seedState.total, onSeedStateChange]);
+
+  useEffect(() => {
+    usedSeedsRef.current = usedSeeds;
+  }, [usedSeeds]);
 
   useEffect(() => {
     return () => {
@@ -161,14 +170,27 @@ export default function SpacePage({
 
   const handleSelectStar = (data: StarSelectionData) => {
     const now = Date.now();
+    if (now < globalPlantLockUntilRef.current) return;
+    if (usedSeedsRef.current >= seedLimit) return showSeedBlock();
+
+    const wordGuardKey = `word:${data.word}`;
+    const lastWordCommitAt = committedWordGuardRef.current.get(wordGuardKey) ?? 0;
+    if (now - lastWordCommitAt < COMMITTED_WORD_WINDOW_MS) return;
+
     const commitKey = makePlantCommitKey(data);
     const lastCommitAt = plantedCommitGuardRef.current.get(commitKey) ?? 0;
     if (now - lastCommitAt < PLANT_DUP_WINDOW_MS) return;
 
     plantedCommitGuardRef.current.set(commitKey, now);
+    committedWordGuardRef.current.set(wordGuardKey, now);
     for (const [key, timestamp] of plantedCommitGuardRef.current.entries()) {
       if (now - timestamp > PLANT_DUP_WINDOW_MS * 12) {
         plantedCommitGuardRef.current.delete(key);
+      }
+    }
+    for (const [key, timestamp] of committedWordGuardRef.current.entries()) {
+      if (now - timestamp > COMMITTED_WORD_WINDOW_MS * 12) {
+        committedWordGuardRef.current.delete(key);
       }
     }
 
@@ -178,7 +200,7 @@ export default function SpacePage({
     }
 
     const { x, y } = makeRandomPosition();
-    const now = Date.now();
+    const nowAtPlant = Date.now();
     const existing = PersistenceService.load();
     const newFlower: FlowerData = {
       id: makeFlowerId(),
@@ -187,8 +209,8 @@ export default function SpacePage({
       color: data.color,
       params: data.params,
       word: data.word,
-      timestamp: now,
-      plantedAt: now,
+      timestamp: nowAtPlant,
+      plantedAt: nowAtPlant,
       lifeSpanMs: Math.round(CONFIG.FLOWER_LIFESPAN_MS * (0.7 + 0.6 * Math.random())),
       witheringMs: Math.round(CONFIG.FLOWER_WITHERING_MS * (0.6 + 0.8 * Math.random())),
     };
@@ -196,10 +218,12 @@ export default function SpacePage({
     existing.push(newFlower);
     PersistenceService.save(existing);
     sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
+    globalPlantLockUntilRef.current = now + PLANT_LOCK_WINDOW_MS;
+    usedSeedsRef.current = usedSeedsRef.current + 1;
 
     setUsedSeeds((current) => {
       const next = current + 1;
-      const toastId = `${data.word}-${next}-${now}`;
+      const toastId = `${data.word}-${next}-${nowAtPlant}`;
       setToasts((currentToasts) => [...currentToasts, { id: toastId, word: data.word }]);
       const timerId = window.setTimeout(() => {
         setToasts((currentToasts) => currentToasts.filter((entry) => entry.id !== toastId));

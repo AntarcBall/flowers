@@ -1,52 +1,40 @@
 import { OrthographicCamera, Vector3, MathUtils } from 'three';
 import { PersistenceService } from './PersistenceService';
 import type { FlowerData } from './PersistenceService';
-import type { FlowerRenderParams, StarSelectionData } from '../types';
+import type { StarSelectionData } from '../types';
 import { CONFIG } from '../config';
-import { buildFlowerProfile, normalizeFlowerParams } from './FlowerShape';
+import { normalizeFlowerParams } from './FlowerShape';
 import { v4 as uuidv4 } from 'uuid';
 
-const FLOWER_RENDER_SCALE = 104;
-const LABEL_FLOWER_RADIUS_SCALE = 0.5;
+const FLOWER_VISUAL_RADIUS = 104;
 const FLOWER_LABEL_GROWTH_MARGIN = 4;
 const LABEL_EDGE_GUARD = 10;
 const LABEL_FLAT_GAP = 10;
 const LABEL_TRIES_PER_RING = 26;
-const LABEL_RING_FACTORS = [1, 1.04, 1.09, 1.16, 1.24, 1.33];
 const LABEL_TEXT_PADDING = 6;
-const LABEL_ADJACENT_OFFSET = 8;
+const LABEL_ORBIT_SCALE = 0.6;
 const FLOWER_SPAWN_MARGIN = 20;
 const FLOWER_MIN_SEPARATION = 100;
 const FLOWER_TRIES_PER_RING = 22;
 const FLOWER_RING_FACTORS = [1.0, 1.2, 1.4, 1.75, 2.1];
-const FLOWER_HITBOX_SCALE = 1.22;
-const LABEL_COLLISION_GAIN = 1.08;
+const FLOWER_HITBOX_SCALE = 1.4;
+const LABEL_COLLISION_GAIN = 1.45;
 const MIN_LIFESPAN_MS = 30 * 1000;
 const MIN_WITHERING_MS = 5000;
-const FLOWER_RADIUS_CACHE_LIMIT = 256;
 
 export class GardenManager {
   flowers: FlowerData[] = [];
   selectedStarData: StarSelectionData | null = null;
-  cameraPosition = new Vector3(CONFIG.GARDEN_WIDTH / 2, CONFIG.GARDEN_HEIGHT / 2, 100);
-  private flowerRadiusCache = new Map<string, number>();
+  cameraPosition = new Vector3(CONFIG.GARDEN_SIZE / 2, CONFIG.GARDEN_SIZE / 2, 100);
   private storageSignature = '';
   private readOnlyMode = true;
   private driftPhase = 0;
   private readonly driftRadiusX = 4.6;
   private readonly driftRadiusY = 3.3;
 
-  private get gardenWidth() {
-    return CONFIG.GARDEN_WIDTH;
-  }
-
-  private get gardenHeight() {
-    return CONFIG.GARDEN_HEIGHT;
-  }
-
   init() {
     this.readOnlyMode = true;
-    this.cameraPosition = new Vector3(this.gardenWidth / 2, this.gardenHeight / 2, 100);
+    this.cameraPosition = new Vector3(CONFIG.GARDEN_SIZE / 2, CONFIG.GARDEN_SIZE / 2, 100);
     this.storageSignature = '';
     this.reloadFromStorage(true);
     PersistenceService.save(this.flowers);
@@ -138,36 +126,6 @@ export class GardenManager {
     return this.clamp01(Math.sin(x * 0.013 + y * 0.017 + Math.sin(x * 0.0071) * 2.89) * 0.5 + 0.5);
   }
 
-  private resolveFlowerDisplayRadius(params: FlowerRenderParams, color: string) {
-    const normalized = normalizeFlowerParams(params);
-    const key = `${color}|${JSON.stringify(normalized)}`;
-    const cached = this.flowerRadiusCache.get(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    const profile = buildFlowerProfile(normalized, color);
-    let maxSq = 0;
-    for (const point of profile.outerPoints) {
-      const d2 = point.x * point.x + point.y * point.y;
-      if (d2 > maxSq) {
-        maxSq = d2;
-      }
-    }
-
-    const radius = maxSq > 0 ? Math.sqrt(maxSq) * FLOWER_RENDER_SCALE : FLOWER_RENDER_SCALE;
-    this.flowerRadiusCache.set(key, radius);
-
-    if (this.flowerRadiusCache.size > FLOWER_RADIUS_CACHE_LIMIT) {
-      const oldestKey = this.flowerRadiusCache.keys().next().value;
-      if (oldestKey) {
-        this.flowerRadiusCache.delete(oldestKey);
-      }
-    }
-
-    return radius;
-  }
-
   private estimateLabelRadius(word: string) {
     const chars = Math.max(1, [...word].length);
     const base = 42 + 4.8 * chars + Math.sqrt(chars) * 18;
@@ -179,7 +137,7 @@ export class GardenManager {
   }
 
   private resolveFlowerHitboxRadius(flower: FlowerData) {
-    const baseRadius = this.resolveFlowerDisplayRadius(flower.params, flower.color) * FLOWER_HITBOX_SCALE;
+    const baseRadius = FLOWER_VISUAL_RADIUS * FLOWER_HITBOX_SCALE;
     const orbitLabelRadius = this.resolveLabelRadius(flower.word || '');
     const labelOffsetDistance = Math.sqrt(
       Math.pow(flower.labelOffsetX || 0, 2) + Math.pow(flower.labelOffsetY || 0, 2),
@@ -202,9 +160,9 @@ export class GardenManager {
   private isInsideGarden(x: number, y: number, radius: number) {
     return (
       x >= radius + LABEL_EDGE_GUARD &&
-      x <= this.gardenWidth - radius - LABEL_EDGE_GUARD &&
+      x <= CONFIG.GARDEN_SIZE - radius - LABEL_EDGE_GUARD &&
       y >= radius + LABEL_EDGE_GUARD &&
-      y <= this.gardenHeight - radius - LABEL_EDGE_GUARD
+      y <= CONFIG.GARDEN_SIZE - radius - LABEL_EDGE_GUARD
     );
   }
 
@@ -227,23 +185,21 @@ export class GardenManager {
     const startAngle = this.toLabelPlacementSeed(x, y);
 
     for (const ringFactor of FLOWER_RING_FACTORS) {
-      const radius = (this.selectedStarData
-        ? this.resolveFlowerDisplayRadius(this.selectedStarData.params, this.selectedStarData.color)
-        : FLOWER_RENDER_SCALE) * ringFactor;
+      const radius = FLOWER_VISUAL_RADIUS * ringFactor;
       for (let i = 0; i < FLOWER_TRIES_PER_RING; i += 1) {
         const angle = startAngle + (i / FLOWER_TRIES_PER_RING) * Math.PI * 2;
         const candidateX = this.clamp(
           x + Math.cos(angle) * radius,
           LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN,
-          this.gardenWidth - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN,
+          CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN,
         );
         const candidateY = this.clamp(
           y + Math.sin(angle) * radius,
           LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN,
-          this.gardenHeight - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN,
+          CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN,
         );
 
-        if (!this.isInsideGarden(candidateX, candidateY, FLOWER_RENDER_SCALE * LABEL_FLOWER_RADIUS_SCALE)) {
+        if (!this.isInsideGarden(candidateX, candidateY, FLOWER_VISUAL_RADIUS)) {
           continue;
         }
 
@@ -256,18 +212,13 @@ export class GardenManager {
     }
 
     return {
-      x: this.clamp(x, LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN, this.gardenWidth - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN),
-      y: this.clamp(y, LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN, this.gardenHeight - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN),
+      x: this.clamp(x, LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN, CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN),
+      y: this.clamp(y, LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN, CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN),
     };
   }
 
   private toLabelPlacementSeed(x: number, y: number) {
     return this.hash01(x, y) * Math.PI * 2;
-  }
-
-  private resolvePreferredLabelDistance(labelRadius: number, flowerOuterRadius: number) {
-    const labelScaleBoost = Math.min(labelRadius, 180) * 0.02;
-    return flowerOuterRadius * LABEL_FLOWER_RADIUS_SCALE + LABEL_ADJACENT_OFFSET + labelScaleBoost;
   }
 
   private canPlaceLabel(
@@ -279,7 +230,7 @@ export class GardenManager {
     for (const flower of placed) {
       const flowerRadius = this.resolveFlowerHitboxRadius(flower);
       const clearRadius =
-        (flowerRadius + placementRadius + FLOWER_LABEL_GROWTH_MARGIN) * LABEL_COLLISION_GAIN;
+        (flowerRadius + placementRadius) * LABEL_COLLISION_GAIN + FLOWER_LABEL_GROWTH_MARGIN * LABEL_COLLISION_GAIN;
 
       if (this.distanceSq(centerX, centerY, flower.x, flower.y) < clearRadius * clearRadius) {
         return false;
@@ -314,44 +265,87 @@ export class GardenManager {
     y: number,
     labelRadius: number,
     placed: FlowerData[],
-    flowerOuterRadius: number,
   ) {
     const startAngle = this.toLabelPlacementSeed(x, y);
-    const baseRadius = this.resolvePreferredLabelDistance(labelRadius, flowerOuterRadius);
-    const outerRadius = baseRadius;
+    const fixedRadius =
+      (FLOWER_VISUAL_RADIUS + FLOWER_LABEL_GROWTH_MARGIN + LABEL_FLAT_GAP + LABEL_TEXT_PADDING) * LABEL_ORBIT_SCALE;
+    const candidates = [];
 
-    for (const ringFactor of LABEL_RING_FACTORS) {
-      const radius = outerRadius * ringFactor;
-      for (let i = 0; i < LABEL_TRIES_PER_RING; i += 1) {
-        const angle = startAngle + (i / LABEL_TRIES_PER_RING) * Math.PI * 2;
-        const candidateX = this.clamp(x + Math.cos(angle) * radius, LABEL_EDGE_GUARD, this.gardenWidth - LABEL_EDGE_GUARD);
-        const candidateY = this.clamp(y + Math.sin(angle) * radius, LABEL_EDGE_GUARD, this.gardenHeight - LABEL_EDGE_GUARD);
-        const offsetX = candidateX - x;
-        const offsetY = candidateY - y;
+    for (let i = 0; i < LABEL_TRIES_PER_RING; i += 1) {
+      const angle = startAngle + (i / LABEL_TRIES_PER_RING) * Math.PI * 2;
+      const candidateX = this.clamp(
+        x + Math.cos(angle) * fixedRadius,
+        LABEL_EDGE_GUARD,
+        CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD,
+      );
+      const candidateY = this.clamp(
+        y + Math.sin(angle) * fixedRadius,
+        LABEL_EDGE_GUARD,
+        CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD,
+      );
+      const offsetX = candidateX - x;
+      const offsetY = candidateY - y;
 
-        if (!this.isInsideGarden(candidateX, candidateY, labelRadius + LABEL_EDGE_GUARD)) {
-          continue;
-        }
+      if (!this.isInsideGarden(candidateX, candidateY, labelRadius + LABEL_EDGE_GUARD)) {
+        candidates.push({ x: candidateX, y: candidateY, offsetX, offsetY, clearance: -Infinity });
+        continue;
+      }
 
-        if (!this.canPlaceLabel(candidateX, candidateY, labelRadius, placed)) {
-          continue;
-        }
-
+      if (this.canPlaceLabel(candidateX, candidateY, labelRadius, placed)) {
         return { offsetX, offsetY };
       }
+
+      let minClearanceSq = Number.POSITIVE_INFINITY;
+      for (const flower of placed) {
+        const flowerRadius = this.resolveFlowerHitboxRadius(flower);
+        const clearRadius =
+          (flowerRadius + labelRadius) * LABEL_COLLISION_GAIN + FLOWER_LABEL_GROWTH_MARGIN * LABEL_COLLISION_GAIN;
+        minClearanceSq = Math.min(
+          minClearanceSq,
+          this.distanceSq(candidateX, candidateY, flower.x, flower.y) - clearRadius * clearRadius,
+        );
+
+        if (
+          flower.labelOffsetX !== undefined &&
+          flower.labelOffsetY !== undefined &&
+          flower.labelRadius !== undefined
+        ) {
+          const existingLabelX = flower.x + flower.labelOffsetX;
+          const existingLabelY = flower.y + flower.labelOffsetY;
+          const existingLabelRadius = this.resolveLabelRadius(flower.word || '');
+          const requiredSq = Math.pow(
+            labelRadius + flower.labelRadius + LABEL_FLAT_GAP * LABEL_COLLISION_GAIN,
+            2,
+          );
+          minClearanceSq = Math.min(
+            minClearanceSq,
+            this.distanceSq(candidateX, candidateY, existingLabelX, existingLabelY) - requiredSq,
+          );
+        }
+      }
+
+      candidates.push({ x: candidateX, y: candidateY, offsetX, offsetY, clearance: minClearanceSq });
     }
 
-    const fallbackRadius = outerRadius;
-    const fallbackAngle = this.toLabelPlacementSeed(x, y) * 1.8;
+    const selected =
+      candidates.length > 0
+        ? candidates.reduce((best, current) => (current.clearance > best.clearance ? current : best))
+        : null;
+
+    if (selected) {
+      return { offsetX: selected.offsetX, offsetY: selected.offsetY };
+    }
+
+    const fallbackAngle = startAngle + 0.5;
     const fallbackX = this.clamp(
-      x + Math.cos(fallbackAngle) * fallbackRadius,
+      x + Math.cos(fallbackAngle) * fixedRadius,
       LABEL_EDGE_GUARD + LABEL_TEXT_PADDING,
-      this.gardenWidth - LABEL_EDGE_GUARD - LABEL_TEXT_PADDING,
+      CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - LABEL_TEXT_PADDING,
     );
     const fallbackY = this.clamp(
-      y + Math.sin(fallbackAngle) * fallbackRadius,
+      y + Math.sin(fallbackAngle) * fixedRadius,
       LABEL_EDGE_GUARD + LABEL_TEXT_PADDING,
-      this.gardenHeight - LABEL_EDGE_GUARD - LABEL_TEXT_PADDING,
+      CONFIG.GARDEN_SIZE - LABEL_EDGE_GUARD - LABEL_TEXT_PADDING,
     );
     return {
       offsetX: fallbackX - x,
@@ -364,13 +358,11 @@ export class GardenManager {
     for (const flower of rawFlowers) {
       const word = flower.word || 'Unknown Bloom';
       const labelRadius = this.resolveLabelRadius(word);
-      const flowerOuterRadius = this.resolveFlowerDisplayRadius(flower.params, flower.color);
       const { offsetX, offsetY } = this.resolveLabelPlacement(
         flower.x,
         flower.y,
         labelRadius,
         normalized,
-        flowerOuterRadius,
       );
 
       normalized.push({
@@ -386,7 +378,7 @@ export class GardenManager {
   }
 
   update(deltaTime: number, camera: OrthographicCamera, inputs?: Record<string, boolean>) {
-    const { SCROLL_SPEED } = CONFIG;
+    const { SCROLL_SPEED, GARDEN_SIZE } = CONFIG;
 
     if (!this.readOnlyMode) {
       const inputState = inputs ?? {};
@@ -396,14 +388,14 @@ export class GardenManager {
       if (inputState['d'] || inputState['D']) this.cameraPosition.x += SCROLL_SPEED;
     } else {
       this.driftPhase += deltaTime * 0.15;
-      const targetX = this.gardenWidth / 2 + Math.sin(this.driftPhase) * this.driftRadiusX;
-      const targetY = this.gardenHeight / 2 + Math.cos(this.driftPhase * 0.7) * this.driftRadiusY;
+      const targetX = CONFIG.GARDEN_SIZE / 2 + Math.sin(this.driftPhase) * this.driftRadiusX;
+      const targetY = CONFIG.GARDEN_SIZE / 2 + Math.cos(this.driftPhase * 0.7) * this.driftRadiusY;
       this.cameraPosition.x = MathUtils.lerp(this.cameraPosition.x, targetX, 0.18);
       this.cameraPosition.y = MathUtils.lerp(this.cameraPosition.y, targetY, 0.18);
     }
 
-    this.cameraPosition.x = MathUtils.clamp(this.cameraPosition.x, 0, this.gardenWidth);
-    this.cameraPosition.y = MathUtils.clamp(this.cameraPosition.y, 0, this.gardenHeight);
+    this.cameraPosition.x = MathUtils.clamp(this.cameraPosition.x, 0, GARDEN_SIZE);
+    this.cameraPosition.y = MathUtils.clamp(this.cameraPosition.y, 0, GARDEN_SIZE);
 
     camera.position.set(this.cameraPosition.x, this.cameraPosition.y, 100);
     camera.lookAt(this.cameraPosition.x, this.cameraPosition.y, 0);
@@ -444,8 +436,7 @@ export class GardenManager {
     const word = this.selectedStarData.word || 'Unknown Bloom';
     const labelRadius = this.resolveLabelRadius(word);
     const { x: resolvedX, y: resolvedY } = resolved;
-    const flowerOuterRadius = this.resolveFlowerDisplayRadius(normalizedParams, this.selectedStarData.color);
-    const { offsetX, offsetY } = this.resolveLabelPlacement(resolvedX, resolvedY, labelRadius, this.flowers, flowerOuterRadius);
+    const { offsetX, offsetY } = this.resolveLabelPlacement(resolvedX, resolvedY, labelRadius, this.flowers);
 
     const newFlower: FlowerData = {
       id: uuidv4(),
@@ -469,4 +460,3 @@ export class GardenManager {
     return newFlower;
   }
 }
-

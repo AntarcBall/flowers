@@ -217,7 +217,10 @@ export default function App() {
 
   const handleSeedCommit = useCallback(
     (entry: { id?: number | string; word: string; color: string; params: StarSelectionData['params'] }) => {
-      setPlantedWords((current) => [...current, entry.word]);
+      setPlantedWords((current) => {
+        if (current.includes(entry.word)) return current;
+        return [...current, entry.word];
+      });
     },
     [],
   );
