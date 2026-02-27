@@ -1,112 +1,112 @@
-# space ÆäÀÌÁö ¼º´É/Ç¥½Ã ¿É¼Ç ¼³¸í
+ï»¿# space íŽ˜ì´ì§€ ì„±ëŠ¥/í‘œì‹œ ì˜µì…˜ ì„¤ëª…
 
-º» ¹®¼­´Â `SpacePage`ÀÇ `OPT` ÆÐ³Î¿¡¼­ Á¶Á¤ÇÒ ¼ö ÀÖ´Â ¿É¼ÇµéÀÇ ÀÇ¹Ì¸¦ ¼³¸íÇÕ´Ï´Ù.
+ë³¸ ë¬¸ì„œëŠ” `SpacePage`ì˜ `OPT` íŒ¨ë„ì—ì„œ ì¡°ì •í•  ìˆ˜ ìžˆëŠ” ì˜µì…˜ë“¤ì˜ ì˜ë¯¸ë¥¼ ì„¤ëª…í•©ë‹ˆë‹¤.
 
-¿É¼ÇÀº `client/src/modules/PerformanceSettings.ts`¿¡ Á¤ÀÇµÇ¾î ÀÖÀ¸¸ç,
-`SpacePage`¿¡¼­ UI·Î ³ëÃâµË´Ï´Ù.
+ì˜µì…˜ì€ `client/src/modules/PerformanceSettings.ts`ì— ì •ì˜ë˜ì–´ ìžˆìœ¼ë©°,
+`SpacePage`ì—ì„œ UIë¡œ ë…¸ì¶œë©ë‹ˆë‹¤.
 
-## ±âº» µ¿ÀÛ
-- º¯°æÀº ½Ç½Ã°£À¸·Î `localStorage`ÀÇ `space_performance_settings`¿¡ ÀúÀåµË´Ï´Ù.
-- ¿ìÃø ÇÏ´Ü `OPT` ¹öÆ°À» ´­·¯ ÆÐ³ÎÀ» ¿­°í ½½¶óÀÌ´õ/Ã¼Å©¹Ú½º·Î Á¶ÀýÇÕ´Ï´Ù.
-- `Reset`Àº ±âº»°ªÀ¸·Î º¹¿øÇÕ´Ï´Ù.
-- `Low power preset`Àº Àú»ç¾ç ¸ðµå ÇÁ¸®¼ÂÀ» Àû¿ëÇÕ´Ï´Ù.
+## ê¸°ë³¸ ë™ìž‘
+- ë³€ê²½ì€ ì‹¤ì‹œê°„ìœ¼ë¡œ `localStorage`ì˜ `space_performance_settings`ì— ì €ìž¥ë©ë‹ˆë‹¤.
+- ìš°ì¸¡ í•˜ë‹¨ `OPT` ë²„íŠ¼ì„ ëˆŒëŸ¬ íŒ¨ë„ì„ ì—´ê³  ìŠ¬ë¼ì´ë”/ì²´í¬ë°•ìŠ¤ë¡œ ì¡°ì ˆí•©ë‹ˆë‹¤.
+- `Reset`ì€ ê¸°ë³¸ê°’ìœ¼ë¡œ ë³µì›í•©ë‹ˆë‹¤.
+- `Low power preset`ì€ ì €ì‚¬ì–‘ ëª¨ë“œ í”„ë¦¬ì…‹ì„ ì ìš©í•©ë‹ˆë‹¤.
 
-## Ç¥½Ã(HUD) °ü·Ã
+## í‘œì‹œ(HUD) ê´€ë ¨
 
 ### `showHud`
-- ÀüÃ¼ HUD Ç¥½Ã Åä±Û.
-- false¸é HUD ¿ä¼Ò°¡ °ÅÀÇ ¸ðµÎ ¼û°ÜÁý´Ï´Ù.
+- ì „ì²´ HUD í‘œì‹œ í† ê¸€.
+- falseë©´ HUD ìš”ì†Œê°€ ê±°ì˜ ëª¨ë‘ ìˆ¨ê²¨ì§‘ë‹ˆë‹¤.
 
 ### `hudCrosshair`
-- È­¸é Áß¾Ó ½ÊÀÚ¼±À» Ç¥½Ã/¼û±è.
+- í™”ë©´ ì¤‘ì•™ ì‹­ìžì„ ì„ í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudSpeedometer`
-- ¼Óµµ°è UI Ç¥½Ã/¼û±è.
+- ì†ë„ê³„ UI í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudPositionPanel`
-- ÇöÀç À§Ä¡ ÁÂÇ¥ ÆÐ³Î Ç¥½Ã/¼û±è.
+- í˜„ìž¬ ìœ„ì¹˜ ì¢Œí‘œ íŒ¨ë„ í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudHeadingCompass`
-- Çìµù/ÇÇÄ¡(HDG/PIT) ÆÐ³Î Ç¥½Ã/¼û±è.
+- í—¤ë”©/í”¼ì¹˜(HDG/PIT) íŒ¨ë„ í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudTargetPanel`
-- ÇöÀç Á¶ÁØ ÁßÀÎ º°ÀÇ ¹Ì¸®º¸±â/¸ñÇ¥ ÆÐ³Î Ç¥½Ã/¼û±è.
+- í˜„ìž¬ ì¡°ì¤€ ì¤‘ì¸ ë³„ì˜ ë¯¸ë¦¬ë³´ê¸°/ëª©í‘œ íŒ¨ë„ í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudThrottleBar`
-- ½º·ÎÆ²/¼Óµµ º¸Á¶ ¹Ù Ç¥½Ã/¼û±è.
+- ìŠ¤ë¡œí‹€/ì†ë„ ë³´ì¡° ë°” í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudRangeReadout`
-- Á¶ÁØ º° °Å¸® Ç¥½Ã ÆÐ³Î Ç¥½Ã/¼û±è.
+- ì¡°ì¤€ ë³„ ê±°ë¦¬ í‘œì‹œ íŒ¨ë„ í‘œì‹œ/ìˆ¨ê¹€.
 
 ### `hudScale`
-- HUD ÀüÃ¼ Å©±â ¹èÀ².
-- »ç¿ë ¹üÀ§: `0.6 ~ 1.4`
+- HUD ì „ì²´ í¬ê¸° ë°°ìœ¨.
+- ì‚¬ìš© ë²”ìœ„: `0.6 ~ 1.4`
 
 ### `hudOpacity`
-- HUD Åõ¸íµµ(¾ËÆÄ).
-- »ç¿ë ¹üÀ§: `0.35 ~ 1`
+- HUD íˆ¬ëª…ë„(ì•ŒíŒŒ).
+- ì‚¬ìš© ë²”ìœ„: `0.35 ~ 1`
 
-## ·»´õ¸µ/¼º´É °ü·Ã
+## ë Œë”ë§/ì„±ëŠ¥ ê´€ë ¨
 
 ### `antialias`
-- ¾ÈÆ¼¾Ù¸®¾î½Ì ÄÑ±â/²ô±â.
-- ²ô¸é ¼º´ÉÀÌ ´õ ÁÁÀ» ¼ö ÀÖ½À´Ï´Ù.
+- ì•ˆí‹°ì•¨ë¦¬ì–´ì‹± ì¼œê¸°/ë„ê¸°.
+- ë„ë©´ ì„±ëŠ¥ì´ ë” ì¢‹ì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.
 
 ### `dprMin`, `dprMax`
-- ·»´õ ÇØ»óµµ ¹èÀ² Á¦ÇÑ.
-- º¸Åë 1.0~2.0 ¹üÀ§·Î Á¶ÀýÇÕ´Ï´Ù.
-- ³·Àº °ªÀÏ¼ö·Ï ÆÛÆ÷¸Õ½º °³¼± ¿©Áö°¡ Å­.
+- ë Œë” í•´ìƒë„ ë°°ìœ¨ ì œí•œ.
+- ë³´í†µ 1.0~2.0 ë²”ìœ„ë¡œ ì¡°ì ˆí•©ë‹ˆë‹¤.
+- ë‚®ì€ ê°’ì¼ìˆ˜ë¡ í¼í¬ë¨¼ìŠ¤ ê°œì„  ì—¬ì§€ê°€ í¼.
 
 ### `backgroundStarDensity`
-- ¹è°æ º° °³¼ö ºñÀ².
-- »ç¿ë ¹üÀ§: `20% ~ 100%`·Î ¸ÅÇÎ.
-- °ªÀÌ ³·À¸¸é ½Ã¾ßÀÇ ÁÖº¯ º° Á¡ÀÌ Àû¾îÁý´Ï´Ù.
+- ë°°ê²½ ë³„ ê°œìˆ˜ ë¹„ìœ¨.
+- ì‚¬ìš© ë²”ìœ„: `20% ~ 100%`ë¡œ ë§¤í•‘.
+- ê°’ì´ ë‚®ìœ¼ë©´ ì‹œì•¼ì˜ ì£¼ë³€ ë³„ ì ì´ ì ì–´ì§‘ë‹ˆë‹¤.
 
 ### `backgroundPointSize`
-- ¹è°æ º° Á¡ Å©±â.
-- ¹üÀ§: `1.0 ~ 3.4`
+- ë°°ê²½ ë³„ ì  í¬ê¸°.
+- ë²”ìœ„: `1.0 ~ 3.4`
 
 ### `starGeometrySegments`
-- º° ±¸Ã¼ ¸Þ½Ã ºÐÇÒ ¼ö(Á¤È®µµ/¿¬»ê·®).
-- ¹üÀ§: `4 ~ 16` (Â¦¼ö ±ÇÀå)
-- ³·À»¼ö·Ï ·»´õ ºñ¿ë °¨¼Ò.
+- ë³„ êµ¬ì²´ ë©”ì‹œ ë¶„í•  ìˆ˜(ì •í™•ë„/ì—°ì‚°ëŸ‰).
+- ë²”ìœ„: `4 ~ 16` (ì§ìˆ˜ ê¶Œìž¥)
+- ë‚®ì„ìˆ˜ë¡ ë Œë” ë¹„ìš© ê°ì†Œ.
 
 ### `gridDensity`
-- Àå¸éÀÇ ±×¸®µå(helper) ¹Ðµµ.
-- ¹üÀ§: `0 ~ 1`
+- ìž¥ë©´ì˜ ê·¸ë¦¬ë“œ(helper) ë°€ë„.
+- ë²”ìœ„: `0 ~ 1`
 
 ### `launchTrailLimit`
-- È­¸é¿¡ ³²À» ¹ß»ç ÀÌÆåÆ® ÃÖ´ë °³¼ö.
-- ¹üÀ§: `0 ~ 10`
+- í™”ë©´ì— ë‚¨ì„ ë°œì‚¬ ì´íŽ™íŠ¸ ìµœëŒ€ ê°œìˆ˜.
+- ë²”ìœ„: `0 ~ 10`
 
 ### `shipQuality`
-- ¿ìÁÖ¼±/½Ã°¢ ¿ä¼Ò »ó¼¼ ·»´õ Ç°Áú Á¤µµ.
-- ¹üÀ§: `0 ~ 1` (Å¬¼ö·Ï °í±Þ material, ¹Ý»ç/¹ß±¤ ¿¬»ê Áõ°¡)
+- ìš°ì£¼ì„ /ì‹œê° ìš”ì†Œ ìƒì„¸ ë Œë” í’ˆì§ˆ ì •ë„.
+- ë²”ìœ„: `0 ~ 1` (í´ìˆ˜ë¡ ê³ ê¸‰ material, ë°˜ì‚¬/ë°œê´‘ ì—°ì‚° ì¦ê°€)
 
 ### `aimSampleStep`
-- º° Á¶ÁØ °è»ê ¶§ »ùÇÃ¸µ °£°Ý.
-- ¹üÀ§: `1 ~ 8`
-- °ªÀÌ Å¬¼ö·Ï CPU ºÎ´ã °¨¼Ò, Á¤¹Ðµµ´Â ¾àÇØÁú ¼ö ÀÖÀ½.
+- ë³„ ì¡°ì¤€ ê³„ì‚° ë•Œ ìƒ˜í”Œë§ ê°„ê²©.
+- ë²”ìœ„: `1 ~ 8`
+- ê°’ì´ í´ìˆ˜ë¡ CPU ë¶€ë‹´ ê°ì†Œ, ì •ë°€ë„ëŠ” ì•½í•´ì§ˆ ìˆ˜ ìžˆìŒ.
 
-## ¶óº§(´Ü¾î) °ü·Ã
+## ë¼ë²¨(ë‹¨ì–´) ê´€ë ¨
 
 ### `maxVisibleLabels`
-- ÇÑ ¹ø¿¡ Ç¥½ÃÇÒ ÃÖ´ë ¶óº§ °³¼ö.
-- ¹üÀ§: `0 ~ 20`
+- í•œ ë²ˆì— í‘œì‹œí•  ìµœëŒ€ ë¼ë²¨ ê°œìˆ˜.
+- ë²”ìœ„: `0 ~ 20`
 
 ### `labelUpdateIntervalMs`
-- ¶óº§ ÈÄº¸ ¾÷µ¥ÀÌÆ® °£°Ý(ms).
-- ¹üÀ§: `24 ~ 220`
-- ³ôÀ¸¸é °»½ÅÀÌ ´À¸®°í CPU °¨¼Ò.
+- ë¼ë²¨ í›„ë³´ ì—…ë°ì´íŠ¸ ê°„ê²©(ms).
+- ë²”ìœ„: `24 ~ 220`
+- ë†’ìœ¼ë©´ ê°±ì‹ ì´ ëŠë¦¬ê³  CPU ê°ì†Œ.
 
 ### `labelConeScale`
-- Á¶ÁØ/Ç¥½Ã¿ë ¶óº§ ¿øÃß°¢ ¹èÀ².
-- ¹üÀ§: `0.55 ~ 1.35`
-- Å¬¼ö·Ï ³ÐÀº ±¸°£ÀÇ º° ¶óº§ Ç¥½Ã °¡´É.
+- ì¡°ì¤€/í‘œì‹œìš© ë¼ë²¨ ì›ì¶”ê° ë°°ìœ¨.
+- ë²”ìœ„: `0.55 ~ 1.35`
+- í´ìˆ˜ë¡ ë„“ì€ êµ¬ê°„ì˜ ë³„ ë¼ë²¨ í‘œì‹œ ê°€ëŠ¥.
 
-## ±âº»°ª(ÂüÁ¶)
+## ê¸°ë³¸ê°’(ì°¸ì¡°)
 
-ÇöÀç ±âº»°ªÀº ´ÙÀ½°ú °°½À´Ï´Ù.
+í˜„ìž¬ ê¸°ë³¸ê°’ì€ ë‹¤ìŒê³¼ ê°™ìŠµë‹ˆë‹¤.
 
 - `dprMin`: 1.0
 - `dprMax`: 1.5
@@ -132,24 +132,25 @@
 - `shipQuality`: 1
 - `gridDensity`: 1
 
-## ±ÇÀå »ç¿ë °¡ÀÌµå
+## ê¶Œìž¥ ì‚¬ìš© ê°€ì´ë“œ
 
-- °í¼º´É ÀåÄ¡: ±âº»°ª ¶Ç´Â ±× ÀÌ»óÀÇ °ªÀ¸·Î ½Ã°¢ Ç°Áú À¯Áö.
-- Àú»ç¾ç ÀåÄ¡:
+- ê³ ì„±ëŠ¥ ìž¥ì¹˜: ê¸°ë³¸ê°’ ë˜ëŠ” ê·¸ ì´ìƒì˜ ê°’ìœ¼ë¡œ ì‹œê° í’ˆì§ˆ ìœ ì§€.
+- ì €ì‚¬ì–‘ ìž¥ì¹˜:
   - `antialias`: false
   - `dprMax`: 1.1
   - `backgroundStarDensity`: 0.35
   - `starGeometrySegments`: 4
   - `aimSampleStep`: 3
-  - `maxVisibleLabels`: 0 ¶Ç´Â Àú°ª
+  - `maxVisibleLabels`: 0 ë˜ëŠ” ì €ê°’
   - `gridDensity`: 0.15
   - `shipQuality`: 0
-- ±ÕÇü ¸ðµå:
+- ê· í˜• ëª¨ë“œ:
   - `backgroundStarDensity`: 0.6
   - `starGeometrySegments`: 6~8
   - `launchTrailLimit`: 3
 
-## ÀúÀå Å°
+## ì €ìž¥ í‚¤
 
-- ÀúÀå Å°: `space_performance_settings`
-- ÀúÀå À§Ä¡: ºê¶ó¿ìÀú `localStorage`
+- ì €ìž¥ í‚¤: `space_performance_settings`
+- ì €ìž¥ ìœ„ì¹˜: ë¸Œë¼ìš°ì € `localStorage`
+
