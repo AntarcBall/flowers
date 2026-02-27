@@ -558,7 +558,7 @@ export default function SpacePage() {
                 <input
                   type="range"
                   min={0.5}
-                  max={12.5}
+                  max={30}
                   step={0.05}
                   value={performanceSettings.labelFontScale}
                   onChange={(e) => updatePerformance({ labelFontScale: Number(e.target.value) })}
@@ -569,7 +569,7 @@ export default function SpacePage() {
                   Label X offset ({performanceSettings.labelOffsetX})
                     <input
                       type="range"
-                      min={-100}
+                      min={-1000}
                       max={100}
                       step={1}
                     value={performanceSettings.labelOffsetX}
@@ -581,7 +581,7 @@ export default function SpacePage() {
                   Label Y offset ({performanceSettings.labelOffsetY})
                   <input
                     type="range"
-                    min={-1000}
+                    min={-300}
                     max={100}
                     step={1}
                     value={performanceSettings.labelOffsetY}

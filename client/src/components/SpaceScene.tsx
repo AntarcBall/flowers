@@ -150,11 +150,11 @@ export const SpaceScene = ({
   const useHighQualityShip = (settings.shipQuality || 0) >= 0.5;
   const showGrid = (settings.gridDensity || 1) >= 0.4;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
-  const labelFontScale = Math.max(0.5, Math.min(12.5, settings.labelFontScale || 1));
+  const labelFontScale = Math.max(0.5, Math.min(30, settings.labelFontScale || 1));
   const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
   const labelFontSize = Math.max(10, Math.round(baseLabelFontSize * labelFontScale));
-  const labelOffsetX = clamp(settings.labelOffsetX || 0, -10, 10);
-  const labelOffsetY = clamp(settings.labelOffsetY || 0, -10, 10);
+  const labelOffsetX = clamp(settings.labelOffsetX || 0, -1000, 100);
+  const labelOffsetY = clamp(settings.labelOffsetY || 0, -300, 100);
   const debugEnabled = debugMode;
 
   const toHeadingDeg = (vector: Vector3) => {
