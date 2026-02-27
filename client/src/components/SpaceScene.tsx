@@ -151,7 +151,7 @@ export const SpaceScene = ({
   const useHighQualityShip = (settings.shipQuality || 0) >= 0.5;
   const showGrid = (settings.gridDensity || 1) >= 0.4;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
-  const labelFontSize = Math.max(10, Math.round(12 + (labelConeScale - 0.55) * 12));
+  const labelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
 
   const toHeadingDeg = (vector: Vector3) => {
     const rawDeg = (Math.atan2(vector.x, vector.z) * 180) / Math.PI;
@@ -298,6 +298,21 @@ export const SpaceScene = ({
       }
     }
 
+    if (labelsEnabled && candidates.length === 0 && starsRef.current.length > 0) {
+      let nearestId: number | null = null;
+      let nearestDist = Infinity;
+      for (const star of starsRef.current) {
+        const dist = star.position.distanceTo(controller.position);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestId = star.id;
+        }
+      }
+      if (nearestId !== null) {
+        insertCandidate(candidates, { id: nearestId, dot: 1, dist: nearestDist }, maxVisibleLabels);
+      }
+    }
+
     if (labelsEnabled) {
       const visibleIds = candidates.map((candidate) => candidate.id);
       const visibleKey = visibleIds.join(',');
@@ -424,7 +439,7 @@ export const SpaceScene = ({
         <Html
           key={star.id}
           position={star.position.toArray()}
-          distanceFactor={10}
+          distanceFactor={1}
           occlude={false}
           zIndexRange={[0, 100]}
         >
