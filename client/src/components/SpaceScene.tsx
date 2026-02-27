@@ -244,7 +244,9 @@ export const SpaceScene = ({
     }
 
     mesh.instanceMatrix.needsUpdate = true;
-    mesh.instanceColor?.needsUpdate = true;
+    if (mesh.instanceColor) {
+      mesh.instanceColor.needsUpdate = true;
+    }
   }, [renderedStars]);
 
   useEffect(() => {
