@@ -24,6 +24,7 @@ export type FlowerRenderParams = {
 };
 
 export type StarSelectionData = {
+  id?: number | string;
   word: string;
   color: string;
   params: FlowerRenderParams;

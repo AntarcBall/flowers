@@ -34,7 +34,12 @@ type SeedState = { used: number; remaining: number; total: number };
 type SpacePageProps = {
   initialSeedLimit?: number;
   onSeedStateChange?: (state: SeedState) => void;
-  onSeedCommit?: (entry: { word: string; color: string; params: StarSelectionData['params'] }) => void;
+  onSeedCommit?: (entry: {
+    id?: number | string;
+    word: string;
+    color: string;
+    params: StarSelectionData['params'];
+  }) => void;
   onPlantHoldState?: (state: SpacePlantHoldState) => void;
   onPlantHoldEvent?: (event: SpacePlantHoldEvent) => void;
   onAimChange?: (data: AimedStarData | null) => void;
@@ -68,7 +73,10 @@ const buildEmbeddingBars = (embedding?: number[] | null): AimEmbeddingPalette[] 
   });
 };
 
-const makeRandomPosition = () => ({ x: Math.random() * CONFIG.GARDEN_SIZE, y: Math.random() * CONFIG.GARDEN_SIZE });
+const makeRandomPosition = () => ({
+  x: Math.random() * CONFIG.GARDEN_WIDTH,
+  y: Math.random() * CONFIG.GARDEN_HEIGHT,
+});
 const makeFlowerId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? (crypto as Crypto).randomUUID()
@@ -105,6 +113,13 @@ export default function SpacePage({
   const [perf, setPerf] = useState<SpacePerformanceSettings>(() => loadSpacePerformanceSettings());
   const [showPerfPanel, setShowPerfPanel] = useState(false);
   const [seedBlocked, setSeedBlocked] = useState(false);
+  const plantedCommitGuardRef = useRef<Map<string, number>>(new Map());
+  const PLANT_DUP_WINDOW_MS = 1200;
+
+  const makePlantCommitKey = (data: StarSelectionData) =>
+    data.id !== undefined
+      ? `id:${String(data.id)}`
+      : `word:${data.word}|${data.color}|m:${Math.round((data.params?.m ?? 0) * 1000)}`;
 
   const toastTimers = useRef<Map<string, number>>(new Map());
   const seedBlockTimer = useRef<number | null>(null);
@@ -145,6 +160,18 @@ export default function SpacePage({
   };
 
   const handleSelectStar = (data: StarSelectionData) => {
+    const now = Date.now();
+    const commitKey = makePlantCommitKey(data);
+    const lastCommitAt = plantedCommitGuardRef.current.get(commitKey) ?? 0;
+    if (now - lastCommitAt < PLANT_DUP_WINDOW_MS) return;
+
+    plantedCommitGuardRef.current.set(commitKey, now);
+    for (const [key, timestamp] of plantedCommitGuardRef.current.entries()) {
+      if (now - timestamp > PLANT_DUP_WINDOW_MS * 12) {
+        plantedCommitGuardRef.current.delete(key);
+      }
+    }
+
     if (!canPlantCurrent()) {
       showSeedBlock();
       return;
@@ -178,7 +205,12 @@ export default function SpacePage({
         setToasts((currentToasts) => currentToasts.filter((entry) => entry.id !== toastId));
       }, 2800);
       toastTimers.current.set(toastId, timerId);
-      onSeedCommit?.({ word: data.word, color: data.color, params: data.params });
+      onSeedCommit?.({
+        id: data.id,
+        word: data.word,
+        color: data.color,
+        params: data.params,
+      });
       return next;
     });
   };
@@ -715,6 +747,3 @@ export default function SpacePage({
     </div>
   );
 }
-
-
-

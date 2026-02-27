@@ -82,8 +82,8 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
   const labelOffsetY = Number(anyRaw.labelOffsetY);
   const labelRadius = Number(anyRaw.labelRadius);
 
-  const clampedX = Math.max(0, Math.min(CONFIG.GARDEN_SIZE, Number.isFinite(x) ? x : 0));
-  const clampedY = Math.max(0, Math.min(CONFIG.GARDEN_SIZE, Number.isFinite(y) ? y : 0));
+  const clampedX = Math.max(0, Math.min(CONFIG.GARDEN_WIDTH, Number.isFinite(x) ? x : 0));
+  const clampedY = Math.max(0, Math.min(CONFIG.GARDEN_HEIGHT, Number.isFinite(y) ? y : 0));
 
   const lifeSpanMs = sanitizeLifeSpan(anyRaw.lifeSpanMs, CONFIG.FLOWER_LIFESPAN_MS);
   const witheringMs = sanitizeWithering(anyRaw.witheringMs, CONFIG.FLOWER_WITHERING_MS, lifeSpanMs);

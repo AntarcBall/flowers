@@ -228,11 +228,13 @@ export const SpaceScene = ({
   const labelRevealStartAtRef = useRef(new Map<number, number>());
   const labelTickRef = useRef(0);
   const [labelTick, setLabelTick] = useState(0);
+  const [launchGuideVisible, setLaunchGuideVisible] = useState(false);
   const plantHoldStartRef = useRef<number | null>(null);
   const plantHoldTargetIdRef = useRef<number | null>(null);
   const plantHoldActiveRef = useRef(false);
   const plantHoldCompletedRef = useRef(false);
   const spaceHoldKeyRef = useRef(false);
+  const launchGuideTargetRef = useRef<SpaceStar | null>(null);
   const debugHoldLogAtRef = useRef(0);
   const spaceHoldStateRef = useRef<SpacePlantHoldState>({
     active: false,
@@ -475,6 +477,16 @@ export const SpaceScene = ({
       aimedStarRef.current = bestTargetId;
     }
 
+    if (spaceHoldKeyRef.current && launchGuideTargetRef.current === null && currentAimedId !== null) {
+      launchGuideTargetRef.current = starsByIdRef.current.get(currentAimedId) ?? null;
+      setLaunchGuideVisible(launchGuideTargetRef.current !== null);
+    }
+
+    if (!spaceHoldKeyRef.current && launchGuideVisible) {
+      launchGuideVisible && setLaunchGuideVisible(false);
+      launchGuideTargetRef.current = null;
+    }
+
     if (currentAimedId !== null) {
       if (aimedStarRef.current === currentAimedId) {
         const star = starsByIdRef.current.get(bestTargetId);
@@ -518,6 +530,8 @@ export const SpaceScene = ({
         }
         plantHoldTargetIdRef.current = null;
         onPlantHold?.(spaceHoldStateRef.current);
+        launchGuideTargetRef.current = null;
+        setLaunchGuideVisible(false);
       }
     } else if (!currentAimedId) {
       onAimChange(null);
@@ -530,6 +544,10 @@ export const SpaceScene = ({
         spaceHoldStateRef.current = idle;
         if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
         onPlantHold?.(idle);
+        launchGuideTargetRef.current = null;
+        setLaunchGuideVisible(false);
+      } else {
+        setLaunchGuideVisible(false);
       }
     }
 
@@ -566,6 +584,8 @@ export const SpaceScene = ({
               if (onPlantHoldEvent) onPlantHoldEvent({ type: 'complete', target: targetPayload });
               selectAimedStar(holdTarget);
               onPlantHold(spaceHoldStateRef.current);
+              launchGuideTargetRef.current = null;
+              setLaunchGuideVisible(false);
             } else {
               plantHoldCompletedRef.current = false;
               plantHoldActiveRef.current = false;
@@ -574,6 +594,8 @@ export const SpaceScene = ({
               spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
               if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
               onPlantHold(spaceHoldStateRef.current);
+              launchGuideTargetRef.current = null;
+              setLaunchGuideVisible(false);
             }
           }
         } else {
@@ -585,6 +607,8 @@ export const SpaceScene = ({
           spaceHoldStateRef.current = idle;
           if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
           onPlantHold(idle);
+          launchGuideTargetRef.current = null;
+          setLaunchGuideVisible(false);
         }
       }
     } else {
@@ -592,6 +616,8 @@ export const SpaceScene = ({
         const idle = { active: false, progress: 0, target: null };
         spaceHoldStateRef.current = idle;
         onPlantHold?.(idle);
+        launchGuideTargetRef.current = null;
+        setLaunchGuideVisible(false);
       }
     }
 
@@ -612,7 +638,7 @@ export const SpaceScene = ({
     const star = starsByIdRef.current.get(currentAimedId);
     if (!star) return;
 
-    onSelectStar({ color: star.color, params: star.params, word: star.word });
+    onSelectStar({ id: star.id, color: star.color, params: star.params, word: star.word });
     if (launchTrailLimit <= 0) return;
     setLaunchEffects((prev) => {
       const keepFrom = Math.max(1, launchTrailLimit) - 1;
@@ -631,11 +657,18 @@ export const SpaceScene = ({
   useEffect(() => {
     const requestPlant = () => {
       if (canPlant && !canPlant()) {
+        setLaunchGuideVisible(false);
         return;
       }
       const currentAimedId = aimedStarRef.current;
-      if (currentAimedId === null) return;
-      if (plantHoldActiveRef.current) return;
+      if (currentAimedId === null) {
+        setLaunchGuideVisible(false);
+        return;
+      }
+      if (plantHoldActiveRef.current) {
+        setLaunchGuideVisible(true);
+        return;
+      }
 
       const star = starsByIdRef.current.get(currentAimedId);
       if (!star) return;
@@ -645,6 +678,7 @@ export const SpaceScene = ({
       plantHoldCompletedRef.current = false;
       plantHoldStartRef.current = now;
       plantHoldTargetIdRef.current = currentAimedId;
+      launchGuideTargetRef.current = star;
       const targetPayload: AimPayload = {
         id: currentAimedId,
         word: star.word,
@@ -654,6 +688,7 @@ export const SpaceScene = ({
       };
       const initialState: SpacePlantHoldState = { active: true, progress: 0, target: targetPayload };
       spaceHoldStateRef.current = initialState;
+      setLaunchGuideVisible(true);
       onPlantHold?.(initialState);
       if (onPlantHoldEvent) onPlantHoldEvent({ type: 'start', target: targetPayload });
       onAimChange(targetPayload);
@@ -682,6 +717,8 @@ export const SpaceScene = ({
       spaceHoldStateRef.current = idle;
       onPlantHold?.(idle);
       if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
+      launchGuideTargetRef.current = null;
+      setLaunchGuideVisible(false);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -696,6 +733,7 @@ export const SpaceScene = ({
       spaceHoldKeyRef.current = false;
       event.preventDefault();
       releasePlant();
+      setLaunchGuideVisible(false);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -704,6 +742,8 @@ export const SpaceScene = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       spaceHoldKeyRef.current = false;
+      launchGuideTargetRef.current = null;
+      setLaunchGuideVisible(false);
     };
   }, [controller, launchTrailLimit, onAimChange, onPlantHold, onPlantHoldEvent, selectAimedStar, canPlant]);
 
@@ -822,7 +862,8 @@ export const SpaceScene = ({
   const launchGuideStart = shipRef.current
     ? shipRef.current.localToWorld(LAUNCH_GUIDE_OFFSET.clone())
     : controller.position.clone();
-  const showLaunchGuide = spaceHoldKeyRef.current && aimedStar !== null;
+  const launchGuideTarget = spaceHoldKeyRef.current ? launchGuideTargetRef.current : null;
+  const showLaunchGuide = launchGuideVisible && launchGuideTarget !== null;
 
   return (
     <>
@@ -991,7 +1032,7 @@ export const SpaceScene = ({
         </group>
       )}
 
-      {showLaunchGuide && aimedStar && (
+      {showLaunchGuide && launchGuideTarget && (
         <line>
           <bufferGeometry>
             <bufferAttribute
@@ -1001,15 +1042,20 @@ export const SpaceScene = ({
                   launchGuideStart.x,
                   launchGuideStart.y,
                   launchGuideStart.z,
-                  aimedStar.position.x,
-                  aimedStar.position.y,
-                  aimedStar.position.z,
+                  launchGuideTarget.position.x,
+                  launchGuideTarget.position.y,
+                  launchGuideTarget.position.z,
                 ]),
                 3,
               ]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#82f4ff" transparent opacity={0.78} />
+          <lineBasicMaterial
+            color="#82f4ff"
+            transparent
+            opacity={0.78}
+            depthTest={false}
+          />
         </line>
       )}
 

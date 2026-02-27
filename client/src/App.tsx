@@ -215,9 +215,12 @@ export default function App() {
     publishVerse(TRIGGERS.blocked);
   }, [publishVerse]);
 
-  const handleSeedCommit = useCallback((entry: { word: string; color: string; params: StarSelectionData['params'] }) => {
-    setPlantedWords((current) => [...current, entry.word]);
-  }, []);
+  const handleSeedCommit = useCallback(
+    (entry: { id?: number | string; word: string; color: string; params: StarSelectionData['params'] }) => {
+      setPlantedWords((current) => [...current, entry.word]);
+    },
+    [],
+  );
 
   const handleRestart = useCallback(() => {
     clearResetTimer();
