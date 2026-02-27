@@ -4,13 +4,10 @@ import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
 import { useInput } from '../hooks/useInput';
 import {
-  Vector3,
   Group,
   PerspectiveCamera,
   AdditiveBlending,
-  Matrix4,
   Color,
-  InstancedMesh,
   SphereGeometry,
   MeshBasicMaterial,
 } from 'three';
@@ -179,18 +176,13 @@ export const SpaceScene = ({
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
   const labelVisibleKeyRef = useRef('');
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
-  const starsInstancedMeshRef = useRef<InstancedMesh>(null);
-
   const [stars, setStars] = useState<SpaceStar[]>([]);
   const starsRef = useRef<SpaceStar[]>([]);
   const starsByIdRef = useRef<Map<number, SpaceStar>>(new Map());
-  const starMatrix = useRef(new Matrix4());
-  const starColor = useRef(new Color());
   const starGeometry = useMemo(
     () => new SphereGeometry(STAR_MESH_RADIUS, starSegments, starSegments),
     [starSegments],
   );
-  const starMaterial = useMemo(() => new MeshBasicMaterial({ vertexColors: true }), []);
   const renderedStars = useMemo(
     () => (sampleStep <= 1 ? stars : stars.filter((_, index) => index % sampleStep === 0)),
     [stars, sampleStep],
@@ -231,42 +223,6 @@ export const SpaceScene = ({
   useEffect(() => {
     starsRef.current = renderedStars;
     starsByIdRef.current = createStarLookup(renderedStars);
-  }, [renderedStars]);
-
-  useEffect(() => {
-    const mesh = starsInstancedMeshRef.current;
-    if (!mesh) return;
-    mesh.count = renderedStars.length;
-
-    for (let index = 0; index < renderedStars.length; index += 1) {
-      const star = renderedStars[index];
-      starMatrix.current.set(
-        1,
-        0,
-        0,
-        star.position.x,
-        0,
-        1,
-        0,
-        star.position.y,
-        0,
-        0,
-        1,
-        star.position.z,
-        0,
-        0,
-        0,
-        1,
-      );
-      mesh.setMatrixAt(index, starMatrix.current);
-      starColor.current.set(star.color);
-      mesh.setColorAt(index, starColor.current);
-    }
-
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) {
-      mesh.instanceColor.needsUpdate = true;
-    }
   }, [renderedStars]);
 
   useEffect(() => {
@@ -622,11 +578,16 @@ export const SpaceScene = ({
         />
       </points>
 
-      <instancedMesh
-        ref={starsInstancedMeshRef}
-        frustumCulled={false}
-        args={[starGeometry, starMaterial, renderedStars.length]}
-      />
+      {renderedStars.map((star) => (
+        <mesh
+          key={star.id}
+          position={star.position.toArray()}
+          geometry={starGeometry}
+          frustumCulled={false}
+        >
+          <meshBasicMaterial color={star.color} />
+        </mesh>
+      ))}
       {starLabels}
 
       {showTargetMarker && aimedStar && (
