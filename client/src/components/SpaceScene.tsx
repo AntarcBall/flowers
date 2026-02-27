@@ -221,9 +221,9 @@ export const SpaceScene = ({
   }, [density]);
 
   useEffect(() => {
-    starsRef.current = renderedStars;
-    starsByIdRef.current = createStarLookup(renderedStars);
-  }, [renderedStars]);
+    starsRef.current = stars;
+    starsByIdRef.current = createStarLookup(stars);
+  }, [stars]);
 
   useEffect(() => {
     const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
@@ -276,9 +276,22 @@ export const SpaceScene = ({
     let bestTargetId: number | null = null;
     let bestDist = Infinity;
     let bestTargetDist = Infinity;
+    let fallbackTargetId: number | null = null;
+    let fallbackTargetDist = Infinity;
     const toStar = new Vector3();
 
-    for (const star of starsRef.current) {
+    for (let i = 0; i < starsRef.current.length; i += 1) {
+      const star = starsRef.current[i];
+      if (sampleStep > 1 && i % sampleStep !== 0) {
+        toStar.subVectors(star.position, controller.position);
+        const dist = toStar.length();
+        if (dist !== 0 && dist < fallbackTargetDist && toStar.normalize().dot(forward) > targetConeCos) {
+          fallbackTargetDist = dist;
+          fallbackTargetId = star.id;
+        }
+        continue;
+      }
+
       toStar.subVectors(star.position, controller.position);
       const dist = toStar.length();
       if (dist === 0) {
@@ -286,6 +299,11 @@ export const SpaceScene = ({
       }
       toStar.normalize();
       const dot = forward.dot(toStar);
+
+      if (dot > targetConeCos && dist < fallbackTargetDist) {
+        fallbackTargetDist = dist;
+        fallbackTargetId = star.id;
+      }
 
       if (dot > targetConeCos && dist < bestDist) {
         bestDist = dist;
@@ -296,6 +314,11 @@ export const SpaceScene = ({
       if (labelsEnabled && dist <= labelConeLength && dot > labelConeCos) {
         insertCandidate(candidates, { id: star.id, dot, dist }, maxVisibleLabels);
       }
+    }
+
+    if (bestTargetId === null && fallbackTargetId !== null) {
+      bestTargetId = fallbackTargetId;
+      bestTargetDist = fallbackTargetDist;
     }
 
     if (labelsEnabled && candidates.length === 0 && starsRef.current.length > 0) {
