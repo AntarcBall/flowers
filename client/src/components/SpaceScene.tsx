@@ -4,6 +4,7 @@ import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
 import { useInput } from '../hooks/useInput';
 import {
+  Vector3,
   Group,
   PerspectiveCamera,
   AdditiveBlending,
