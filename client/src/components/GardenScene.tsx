@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useThree } from '@react-three/fiber';
 import { OrthographicCamera, Html } from '@react-three/drei';
 import { GardenManager } from '../modules/GardenManager';
 import { useInput } from '../hooks/useInput';
@@ -8,26 +8,37 @@ import { CONFIG } from '../config';
 import { Flower } from './Flower';
 import { PersistenceService } from '../modules/PersistenceService';
 
+const MOVEMENT_KEYS = new Set(['w', 'W', 'a', 'A', 's', 'S', 'd', 'D']);
+
 export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => {
     const manager = useMemo(() => new GardenManager(), []);
     const inputRef = useInput();
-    const { camera } = useThree();
+    const { camera, invalidate } = useThree();
     const [flowers, setFlowers] = useState(manager.flowers);
+    const rafRef = useRef<number | null>(null);
+
+    const stepGarden = useCallback(() => {
+        manager.update(inputRef.current, camera as ThreeOrthographicCamera);
+        invalidate();
+    }, [camera, invalidate, inputRef, manager]);
 
     useEffect(() => {
         manager.init();
         manager.selectedStarData = selectedStarData;
         setFlowers([...manager.flowers]);
+        stepGarden();
 
         const handleStorageChange = (event: StorageEvent) => {
             if (event.key && event.key !== CONFIG.STORAGE_KEY) return;
             manager.init();
             setFlowers([...manager.flowers]);
+            invalidate();
         };
 
         const handleCustomStorageUpdate = () => {
             manager.init();
             setFlowers([...manager.flowers]);
+            invalidate();
         };
 
         window.addEventListener('storage', handleStorageChange);
@@ -37,17 +48,58 @@ export const GardenScene = ({ selectedStarData }: { selectedStarData: any }) => 
             window.removeEventListener('storage', handleStorageChange);
             window.removeEventListener(PersistenceService.STORAGE_UPDATED_EVENT, handleCustomStorageUpdate);
         };
-    }, [manager, selectedStarData]);
+    }, [invalidate, manager, selectedStarData, stepGarden]);
 
-    useFrame(() => {
-        manager.update(inputRef.current, camera as ThreeOrthographicCamera);
-    });
+    useEffect(() => {
+        const run = () => {
+            stepGarden();
+            rafRef.current = window.requestAnimationFrame(run);
+        };
+
+        const startLoop = () => {
+            if (rafRef.current !== null) return;
+            rafRef.current = window.requestAnimationFrame(run);
+        };
+
+        const stopLoop = () => {
+            if (rafRef.current === null) return;
+            window.cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+            stepGarden();
+        };
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (!MOVEMENT_KEYS.has(event.key)) return;
+            startLoop();
+        };
+
+        const handleKeyUp = (event: KeyboardEvent) => {
+            if (!MOVEMENT_KEYS.has(event.key)) return;
+            const isAnyMovementKeyHeld = ['w', 'W', 'a', 'A', 's', 'S', 'd', 'D'].some((key) => inputRef.current[key]);
+            if (!isAnyMovementKeyHeld) {
+                stopLoop();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+            if (rafRef.current !== null) {
+                window.cancelAnimationFrame(rafRef.current);
+                rafRef.current = null;
+            }
+        };
+    }, [inputRef, stepGarden]);
 
     const handlePlant = (e: any) => {
         const point = e.point;
         const newFlower = manager.plantFlower(point.x, point.y);
         if (newFlower) {
             setFlowers([...manager.flowers]);
+            invalidate();
         }
     };
 

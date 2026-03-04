@@ -34,7 +34,7 @@ export default function GardenPage() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
-      <Canvas>
+      <Canvas frameloop="demand">
         <GardenScene selectedStarData={preview} />
       </Canvas>
 
