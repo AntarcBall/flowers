@@ -48,6 +48,7 @@ type SpacePageProps = {
 };
 
 const formatCoord = (value: number) => value.toFixed(2);
+const FIXED_START_SPEED = 12;
 const normalizeSeedLimit = (value?: number) => {
   if (!Number.isFinite(value as number) || (value as number) <= 0) {
     return 3;
@@ -97,9 +98,9 @@ export default function SpacePage({
   const [debugMode, setDebugMode] = useState(false);
   const [aimedStarData, setAimedStarData] = useState<AimedStarData | null>(null);
   const [telemetry, setTelemetry] = useState({
-    speed: 0,
+    speed: FIXED_START_SPEED,
     position: { x: 0, y: 0, z: 0 },
-    velocity: { x: 0, y: 0, z: 0 },
+    velocity: { x: 0, y: 0, z: FIXED_START_SPEED },
     headingDeg: 0,
     pitchDeg: 0,
   });

@@ -146,7 +146,7 @@ const CONE_HEIGHT = 50 * 14;
 const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
 const LABEL_REVEAL_MS = 640;
 const PLANT_HOLD_DURATION_MS = 900;
-const SPACE_AIMING_SPEED_SCALE = 0.7;
+
 const LAUNCH_GUIDE_OFFSET = new Vector3(0, 0.05, -1.62);
 
 function insertCandidate(
@@ -338,9 +338,7 @@ export const SpaceScene = ({
   }, [debugEnabled]);
 
   useFrame((_, delta) => {
-    const isAimingSlowdown = aimedStarRef.current !== null && spaceHoldKeyRef.current;
-    const moveSpeedScale = isAimingSlowdown ? SPACE_AIMING_SPEED_SCALE : 1;
-    controller.update(delta, inputRef.current, moveSpeedScale);
+    controller.update(delta, inputRef.current);
     if (shipRef.current) {
       shipRef.current.position.copy(controller.position);
       shipRef.current.quaternion.copy(controller.quaternion);
@@ -350,7 +348,7 @@ export const SpaceScene = ({
     }
     tpsCamera.update(camera as PerspectiveCamera, controller, delta);
     const forward = controller.getForwardVector();
-    const appliedSpeed = controller.speed * moveSpeedScale;
+    const appliedSpeed = controller.speed;
     const velocity = {
       x: forward.x * appliedSpeed,
       y: forward.y * appliedSpeed,
@@ -1024,12 +1022,27 @@ export const SpaceScene = ({
       {starLabels}
 
       {showTargetMarker && aimedStar && (
-        <group position={aimedStar.position.toArray()}>
-          <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
-            <coneGeometry args={[1, 2, 4]} />
-            <meshBasicMaterial color="white" />
-          </mesh>
-        </group>
+        <Html
+          center
+          distanceFactor={25}
+          zIndexRange={[100, 2000]}
+          occlude={false}
+          position={aimedStar.position.toArray()}
+        >
+          <div
+            style={{
+              width: 700,
+              height: 700,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              border: '2px solid rgba(255, 255, 255, 0.42)',
+              background:
+                'radial-gradient(circle, rgba(255,255,255,0.45) 0%, rgba(140, 220, 255, 0.18) 52%, rgba(140, 220, 255, 0) 74%)',
+              boxShadow: '0 0 26px rgba(140, 220, 255, 0.28)',
+              pointerEvents: 'none',
+            }}
+          />
+        </Html>
       )}
 
       {showLaunchGuide && launchGuideTarget && (

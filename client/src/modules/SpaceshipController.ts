@@ -3,11 +3,12 @@ import { CONFIG } from '../config';
 
 const X_AXIS = new Vector3(1, 0, 0);
 const Y_AXIS = new Vector3(0, 1, 0);
+const FIXED_SHIP_SPEED = 12;
 
 export class SpaceshipController {
   position = new Vector3(0, 0, 0);
   quaternion = new Quaternion();
-  speed = 0;
+  speed = FIXED_SHIP_SPEED;
   angularVelocity = { pitch: 0, yaw: 0 };
   private readonly pitchQuaternion = new Quaternion();
   private readonly yawQuaternion = new Quaternion();
@@ -16,22 +17,10 @@ export class SpaceshipController {
   update(
     deltaTime: number,
     inputState: Record<string, boolean>,
-    speedScale = 1,
+    _speedScale = 1,
   ): boolean {
-    const { MAX_SPEED, ACCEL_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
-    const isThrottleInput = inputState['q'] || inputState['Q'] || inputState['e'] || inputState['E'];
-
-    if (inputState['q'] || inputState['Q']) this.speed += ACCEL_SPEED;
-    if (inputState['e'] || inputState['E']) this.speed -= ACCEL_SPEED;
-    this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
-
-    if (!isThrottleInput) {
-      const DECAY_PER_5S = 0.9;
-      const DECAY_SECONDS = 5;
-      const decayFactor = Math.pow(DECAY_PER_5S, deltaTime / DECAY_SECONDS);
-      this.speed *= decayFactor;
-      this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
-    }
+    const { MAX_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
+    this.speed = MathUtils.clamp(FIXED_SHIP_SPEED, 0, MAX_SPEED); // deprecated: speed controls are fixed at runtime
 
     if (inputState['w'] || inputState['W']) this.angularVelocity.pitch -= ACCEL_ROT;
     if (inputState['s'] || inputState['S']) this.angularVelocity.pitch += ACCEL_ROT;
@@ -48,7 +37,7 @@ export class SpaceshipController {
     this.quaternion.multiply(this.pitchQuaternion);
 
     const forwardVector = this.getForwardVector();
-    const effectiveSpeed = this.speed * speedScale;
+    const effectiveSpeed = this.speed;
     this.position.addScaledVector(forwardVector, effectiveSpeed * deltaTime);
 
     let warped = false;
