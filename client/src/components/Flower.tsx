@@ -1,76 +1,126 @@
-import { useMemo } from 'react';
-import { Vector3, Shape, DoubleSide } from 'three';
+import { memo, useMemo } from 'react';
+import { AdditiveBlending, CanvasTexture, Color, DoubleSide, SRGBColorSpace } from 'three';
+import type { FlowerRenderParams } from '../types';
+import { normalizeFlowerParams } from '../modules/FlowerShape';
+import { buildFlowerCanvas } from '../modules/FlowerCanvas';
 
-const TAU = Math.PI * 2;
+type FlowerProps = {
+  params: FlowerRenderParams;
+  color: string;
+  scale?: number;
+  growth?: number;
+  vitality?: number;
+};
 
-function superR(phi: number, m: number, n1: number, n2: number, n3: number, a = 1, b = 1) {
-    const t1 = Math.pow(Math.abs(Math.cos(m * phi / 4) / a), n2);
-    const t2 = Math.pow(Math.abs(Math.sin(m * phi / 4) / b), n3);
-    const base = t1 + t2;
+const clamp = (value: number, min: number, max: number) => {
+  return Math.max(min, Math.min(max, value));
+};
 
-    if (base <= 0 || !Number.isFinite(base)) return 0;
-    const r = Math.pow(base, -1 / n1);
-    if (!Number.isFinite(r)) return 0;
-    return r;
+const FLOWER_CANVAS_SIZE = 120;
+const TEXTURE_CACHE = new Map<string, CanvasTexture>();
+
+function makeTextureKey(params: FlowerRenderParams, color: string, growth: number) {
+  return JSON.stringify({
+    color,
+    growth: Number(clamp(growth, 0, 1).toFixed(3)),
+    m: params.m,
+    n1: params.n1,
+    n2: params.n2,
+    n3: params.n3,
+    rot: params.rot,
+    petalCount: params.petalCount,
+    petalStretch: params.petalStretch,
+    petalCrest: params.petalCrest,
+    petalSpread: params.petalSpread,
+    coreRadius: params.coreRadius,
+    coreGlow: params.coreGlow,
+    rimWidth: params.rimWidth,
+    outlineWeight: params.outlineWeight,
+    symmetry: params.symmetry,
+    mandalaDepth: params.mandalaDepth,
+    ringBands: params.ringBands,
+    radialTwist: params.radialTwist,
+    innerVoid: params.innerVoid,
+    fractalIntensity: params.fractalIntensity,
+    sectorWarp: params.sectorWarp,
+    ringContrast: params.ringContrast,
+    depthEcho: params.depthEcho,
+  });
 }
 
-export const Flower = ({ 
-    params, 
-    color, 
-    scale = 1 
-}: { 
-    params: { m: number, n1: number, n2: number, n3: number, rot?: number }, 
-    color: string, 
-    scale?: number 
-}) => {
-    const points = useMemo(() => {
-        const { m, n1, n2, n3, rot = 0 } = params;
-        const mInteger = Math.max(1, Math.round(m));
-        const N = Math.max(180, 360 * mInteger);
-        const pts = [];
+function getFlowerTexture(params: FlowerRenderParams, color: string, growth: number) {
+  const key = makeTextureKey(params, color, growth);
+  const cached = TEXTURE_CACHE.get(key);
+  if (cached) {
+    return cached;
+  }
 
-        for (let i = 0; i <= N; i++) {
-            const phi = (i / N) * TAU;
-            const r = superR(phi, m, n1, n2, n3);
-            const x = r * Math.cos(phi + rot);
-            const y = r * Math.sin(phi + rot);
-            pts.push(new Vector3(x, y, 0));
-        }
-        return pts;
-    }, [params]);
+  const canvas = buildFlowerCanvas(params, color, FLOWER_CANVAS_SIZE, growth);
+  const texture = new CanvasTexture(canvas);
+  texture.flipY = false;
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  TEXTURE_CACHE.set(key, texture);
+  return texture;
+}
 
-    const shape = useMemo(() => {
-        if (points.length < 3) return null;
+function getVitalityColor(color: string, vitality: number) {
+  const parsed = new Color(color);
+  parsed.multiplyScalar(Math.max(0, Math.min(1, vitality)));
+  return `#${parsed.getHexString()}`;
+}
 
-        const path = new Shape();
-        const [firstPoint, ...restPoints] = points;
-        if (!firstPoint) return null;
+const FlowerCore = ({ params, color, scale = 1, growth, vitality = 1 }: FlowerProps) => {
+  const resolvedParams = useMemo(() => normalizeFlowerParams(params), [params]);
+  const normalizedGrowth = clamp(growth === undefined ? 1 : growth, 0, 1);
+  const normalizedVitality = clamp(vitality, 0, 1);
+  const vigor = normalizedVitality;
+  const vitalityColor = useMemo(() => getVitalityColor(color, normalizedVitality), [color, normalizedVitality]);
+  const texture = useMemo(
+    () => getFlowerTexture(resolvedParams, color, normalizedGrowth),
+    [resolvedParams, color, normalizedGrowth],
+  );
+  const groupScale = scale * (0.25 + 0.75 * normalizedGrowth);
+  const alpha = (0.35 + 0.65 * normalizedGrowth) * (0.25 + 0.75 * vigor);
+  const rim = 1 + resolvedParams.rimWidth * 0.12;
+  const witheringOverlay = Math.min(1, (1 - normalizedVitality) * 1.15);
+  const witherOpacity = Math.max(0, Math.min(1, witheringOverlay));
 
-        path.moveTo(firstPoint.x, firstPoint.y);
-        for (const point of restPoints) {
-            path.lineTo(point.x, point.y);
-        }
-        return path;
-    }, [points]);
+  return (
+    <group scale={[groupScale, groupScale, 1]}>
+      <mesh position={[0, 0, 0.02]}>
+        <planeGeometry args={[rim * 1.16, rim * 1.16]} />
+        <meshBasicMaterial
+          map={texture}
+          color={vitalityColor}
+          side={DoubleSide}
+          transparent
+          opacity={0.22 * alpha}
+          blending={AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
 
-    return (
-        <group scale={[scale, scale, scale]}>
-            {shape && (
-                <mesh>
-                    <shapeGeometry args={[shape]} />
-                    <meshBasicMaterial color={color} side={DoubleSide} />
-                </mesh>
-            )}
-             
-             <line>
-                <bufferGeometry>
-                    <bufferAttribute 
-                        attach="attributes-position"
-                        args={[new Float32Array(points.flatMap(p => [p.x, p.y, p.z])), 3]}
-                    />
-                </bufferGeometry>
-                <lineBasicMaterial color={color} linewidth={2} />
-             </line>
-        </group>
-    );
+      <mesh>
+        <planeGeometry args={[rim, rim]} />
+        <meshBasicMaterial map={texture} side={DoubleSide} color={vitalityColor} transparent opacity={alpha} toneMapped={false} />
+      </mesh>
+
+      <mesh position={[0, 0, 0.01]}>
+        <planeGeometry args={[rim, rim]} />
+        <meshBasicMaterial
+          map={texture}
+          color="#000000"
+          side={DoubleSide}
+          transparent
+          opacity={witherOpacity * 0.65 * alpha}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  );
 };
+
+export const Flower = memo(FlowerCore);

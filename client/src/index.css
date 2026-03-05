@@ -6,12 +6,11 @@
 }
 
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'NanumGothicCustom', Georgia, 'Times New Roman', serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
+  color: rgba(236, 244, 255, 0.95);
   background-color: #000000;
 
   font-synthesis: none;
@@ -49,7 +48,7 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background: linear-gradient(180deg, #1f2a42, #111927);
   cursor: pointer;
   transition: border-color 0.25s;
 }
@@ -59,17 +58,4 @@ button:hover {
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
 }

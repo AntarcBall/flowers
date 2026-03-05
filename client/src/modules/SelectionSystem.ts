@@ -10,11 +10,13 @@ export class SelectionSystem {
         stars: Array<{position: Vector3, id: number}>
     ): number | null {
         
+        const toStar = new Vector3();
         let bestTargetId: number | null = null;
         let minDist = Infinity;
+        const threshold = Math.cos(CONFIG.CONE_ANGLE_THRESHOLD);
 
         for (const star of stars) {
-            const toStar = new Vector3().subVectors(star.position, shipPos);
+            toStar.subVectors(star.position, shipPos);
             const dist = toStar.length();
             
             if (dist === 0) continue; 
@@ -24,8 +26,6 @@ export class SelectionSystem {
             // Dot product = cos(angle)
             // If angle < threshold, then cos(angle) > cos(threshold)
             const dot = shipForward.dot(toStar);
-            const threshold = Math.cos(CONFIG.CONE_ANGLE_THRESHOLD);
-
             if (dot > threshold) {
                 if (dist < minDist) {
                     minDist = dist;

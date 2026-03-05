@@ -1,27 +1,26 @@
 import { Vector3, Quaternion, MathUtils } from 'three';
 import { CONFIG } from '../config';
 
+const X_AXIS = new Vector3(1, 0, 0);
+const Y_AXIS = new Vector3(0, 1, 0);
+const FIXED_SHIP_SPEED = 12;
+
 export class SpaceshipController {
   position = new Vector3(0, 0, 0);
   quaternion = new Quaternion();
-  speed = 0;
+  speed = FIXED_SHIP_SPEED;
   angularVelocity = { pitch: 0, yaw: 0 };
+  private readonly pitchQuaternion = new Quaternion();
+  private readonly yawQuaternion = new Quaternion();
+  private readonly forwardVector = new Vector3();
 
-  update(deltaTime: number, inputState: Record<string, boolean>): boolean {
-    const { MAX_SPEED, ACCEL_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
-    const isThrottleInput = inputState['q'] || inputState['Q'] || inputState['e'] || inputState['E'];
-
-    if (inputState['q'] || inputState['Q']) this.speed += ACCEL_SPEED;
-    if (inputState['e'] || inputState['E']) this.speed -= ACCEL_SPEED;
-    this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
-
-    if (!isThrottleInput) {
-      const DECAY_PER_5S = 0.9;
-      const DECAY_SECONDS = 5;
-      const decayFactor = Math.pow(DECAY_PER_5S, deltaTime / DECAY_SECONDS);
-      this.speed *= decayFactor;
-      this.speed = MathUtils.clamp(this.speed, 0, MAX_SPEED);
-    }
+  update(
+    deltaTime: number,
+    inputState: Record<string, boolean>,
+    _speedScale = 1,
+  ): boolean {
+    const { MAX_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
+    this.speed = MathUtils.clamp(FIXED_SHIP_SPEED, 0, MAX_SPEED); // deprecated: speed controls are fixed at runtime
 
     if (inputState['w'] || inputState['W']) this.angularVelocity.pitch -= ACCEL_ROT;
     if (inputState['s'] || inputState['S']) this.angularVelocity.pitch += ACCEL_ROT;
@@ -31,13 +30,15 @@ export class SpaceshipController {
     this.angularVelocity.pitch *= DAMPING_ROT;
     this.angularVelocity.yaw *= DAMPING_ROT;
 
-    const pitchQuaternion = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), this.angularVelocity.pitch);
-    const yawQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), this.angularVelocity.yaw);
+    this.pitchQuaternion.setFromAxisAngle(X_AXIS, this.angularVelocity.pitch);
+    this.yawQuaternion.setFromAxisAngle(Y_AXIS, this.angularVelocity.yaw);
 
-    this.quaternion.multiply(pitchQuaternion).multiply(yawQuaternion);
+    this.quaternion.premultiply(this.yawQuaternion);
+    this.quaternion.multiply(this.pitchQuaternion);
 
-    const forwardVector = new Vector3(0, 0, 1).applyQuaternion(this.quaternion);
-    this.position.addScaledVector(forwardVector, this.speed * deltaTime);
+    const forwardVector = this.getForwardVector();
+    const effectiveSpeed = this.speed;
+    this.position.addScaledVector(forwardVector, effectiveSpeed * deltaTime);
 
     let warped = false;
     if (Math.abs(this.position.x) > CUBE_SIZE || 
@@ -50,7 +51,7 @@ export class SpaceshipController {
     return warped;
   }
 
-  getForwardVector() {
-    return new Vector3(0, 0, 1).applyQuaternion(this.quaternion).normalize();
+  getForwardVector(out: Vector3 = this.forwardVector) {
+    return out.set(0, 0, 1).applyQuaternion(this.quaternion).normalize();
   }
 }

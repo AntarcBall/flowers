@@ -2,16 +2,31 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { SpaceshipController } from '../modules/SpaceshipController';
 import { TPSCamera } from '../modules/TPSCamera';
-import { SelectionSystem } from '../modules/SelectionSystem';
 import { useInput } from '../hooks/useInput';
-import { Vector3, Group, PerspectiveCamera, AdditiveBlending, BackSide, CanvasTexture, LinearFilter } from 'three';
+import {
+  Vector3,
+  Group,
+  PerspectiveCamera,
+  AdditiveBlending,
+  Color,
+  SphereGeometry,
+  MeshBasicMaterial,
+} from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
+import {
+  DEFAULT_SPACE_PERFORMANCE_SETTINGS,
+  type SpacePerformanceSettings,
+  LABEL_FONT_MIN_MAX,
+} from '../modules/PerformanceSettings';
 import { CONFIG } from '../config';
 
 type Telemetry = {
   speed: number;
   position: { x: number; y: number; z: number };
+  velocity?: { x: number; y: number; z: number };
+  headingDeg?: number;
+  pitchDeg?: number;
 };
 
 type LaunchEffect = {
@@ -20,28 +35,223 @@ type LaunchEffect = {
   start: Vector3;
   elapsed: number;
   duration: number;
-  selectedStarData: {
-    color: string;
-    params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
-    word: string;
+};
+
+type AimCandidate = {
+  id: number;
+  dot: number;
+  dist: number;
+};
+
+type AimPayload = {
+  id?: number;
+  word: string;
+  color: string;
+  params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+  embedding: number[];
+  distance?: number;
+  headingOffsetDeg?: number;
+};
+
+type SpaceStar = {
+  id: number;
+  word: string;
+  color: string;
+  embedding: number[];
+  params: ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+  position: Vector3;
+};
+
+type StarEmbeddingParams = ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+
+const buildStarEmbedding = (params: StarEmbeddingParams, position: Vector3, color: string) => {
+  const normalizeParam = (key: string, value: number) => {
+    const range = CONFIG.FLOWER_RANGES[key];
+    if (!range) return 0.5;
+    if (!Number.isFinite(value)) return 0.5;
+    if (range.max === range.min) return 0.5;
+    return clamp01((value - range.min) / (range.max - range.min));
   };
+
+  const normalizedPos = [
+    clamp01((position.x / CONFIG.CUBE_SIZE + 1) / 2),
+    clamp01((position.y / CONFIG.CUBE_SIZE + 1) / 2),
+    clamp01((position.z / CONFIG.CUBE_SIZE + 1) / 2),
+  ];
+
+  const probeColor = new Color();
+  const parsedColor = (() => {
+    try {
+      probeColor.set(color);
+      return [probeColor.r, probeColor.g, probeColor.b];
+    } catch {
+      return [0, 0, 0];
+    }
+  })();
+
+  const normalizedParams = Object.entries(params)
+    .filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+    .map(([key, value]) => normalizeParam(key, value));
+
+  return [...normalizedPos, ...normalizedParams, ...parsedColor];
+};
+  
+const getStarColor = (x: number, y: number, z: number) =>
+  SemanticMapper.mapCoordinatesToColor(x, y, z);
+const DEFAULT_STAR_COLOR = '#7a8cff';
+const isValidHexColor = (value: string) => /^#([0-9a-f]{6})$/i.test(value);
+
+const resolveStarColor = (coordColor: string, fallbackColor?: string) => {
+  const probe = new Color();
+  const parseToHex = (value?: string) => {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    probe.set(trimmed);
+    const hex = `#${probe.getHexString()}`;
+    return isValidHexColor(hex) && hex.toLowerCase() !== '#000000' ? hex : null;
+  };
+
+  return parseToHex(coordColor) ?? parseToHex(fallbackColor) ?? DEFAULT_STAR_COLOR;
+};
+
+export type SpacePlantHoldState = {
+  active: boolean;
+  progress: number;
+  target: AimPayload | null;
+};
+
+export type SpacePlantHoldEvent = {
+  type: 'start' | 'cancel' | 'complete';
+  target: AimPayload | null;
 };
 
 const makeLaunchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
+const isSpaceKey = (event: KeyboardEvent) =>
+  event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar';
+
+const BACKGROUND_STAR_COUNT = 1700;
+const BACKGROUND_STAR_RADIUS_MIN = 900;
+const BACKGROUND_STAR_RADIUS_MAX = 1800;
+const STAR_MESH_RADIUS = 0.95 * 2.4;
+const LABEL_CONE_LENGTH_BASE = 50 * 14;
+const CONE_HEIGHT = 50 * 14;
+const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
+const LABEL_REVEAL_MS = 640;
+const PLANT_HOLD_DURATION_MS = 900;
+
+const LAUNCH_GUIDE_OFFSET = new Vector3(0, 0.05, -1.62);
+
+function insertCandidate(
+  candidates: AimCandidate[],
+  candidate: AimCandidate,
+  maxItems: number,
+) {
+  let insertIndex = candidates.length;
+  for (let i = 0; i < candidates.length; i += 1) {
+    const item = candidates[i];
+    if (candidate.dot > item.dot || (candidate.dot === item.dot && candidate.dist < item.dist)) {
+      insertIndex = i;
+      break;
+    }
+  }
+
+  if (insertIndex >= maxItems) {
+    return;
+  }
+
+  candidates.splice(insertIndex, 0, candidate);
+  if (candidates.length > maxItems) {
+    candidates.pop();
+  }
+}
+
+function createStarLookup(list: SpaceStar[]) {
+  const map = new Map<number, SpaceStar>();
+  for (const star of list) {
+    map.set(star.id, star);
+  }
+  return map;
+}
 
 export const SpaceScene = ({
   onSelectStar,
   debugMode,
   onAimChange,
-  onTelemetryChange
+  onTelemetryChange,
+  performance,
+  onPlantHold,
+  onPlantHoldEvent,
+  canPlant,
 }: {
   onSelectStar: (data: any) => void;
   debugMode: boolean;
-  onAimChange: (data: any) => void;
+  onAimChange: (data: AimPayload | null) => void;
   onTelemetryChange: (data: Telemetry) => void;
+  performance?: SpacePerformanceSettings;
+  onPlantHold?: (state: SpacePlantHoldState) => void;
+  onPlantHoldEvent?: (event: SpacePlantHoldEvent) => void;
+  canPlant?: () => boolean;
 }) => {
+  const settings = performance ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS;
+  const density = Math.max(0.2, Math.min(1, settings.backgroundStarDensity));
+  const maxVisibleLabels = Math.max(0, Math.min(20, Math.round(settings.maxVisibleLabels || 0)));
+  const labelsEnabled = maxVisibleLabels > 0;
+  const showTargetMarker = settings.showHud && settings.hudTargetPanel;
+  const labelConeScale = Math.max(0.55, Math.min(1.35, settings.labelConeScale || 0.9));
+  const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * labelConeScale;
+  const labelConeCos = Math.cos(labelConeAngle);
+  const targetConeCos = Math.cos(labelConeAngle * 0.83);
+  const labelConeLength = LABEL_CONE_LENGTH_BASE * labelConeScale;
+  const starSegments = Math.max(4, Math.min(16, Math.round(settings.starGeometrySegments || 8)));
+  const starScale = Math.max(0.2, Math.min(3, settings.starScale || 1));
+  const shipScale = Math.max(0.2, Math.min(3, settings.shipScale || 1));
+  const launchTrailLimit = Math.max(0, Math.round(settings.launchTrailLimit || 0));
+  const useHighQualityShip = (settings.shipQuality || 0) >= 0.5;
+  const showGrid = (settings.gridDensity || 1) >= 0.4;
+  const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
+  const labelFontScale = Math.max(0.5, Math.min(30, settings.labelFontScale || 1));
+  const labelFontMin = Math.max(1, Math.min(LABEL_FONT_MIN_MAX, Math.round(settings.labelFontMin || 10)));
+  const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
+  const labelFontSize = Math.max(labelFontMin, Math.round(baseLabelFontSize * labelFontScale));
+  const labelOffsetX = clamp(settings.labelOffsetX || 0, -1000, 100);
+  const labelOffsetY = clamp(settings.labelOffsetY || 0, -300, 100);
+  const debugEnabled = debugMode;
+  const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
+  const labelRevealStartAtRef = useRef(new Map<number, number>());
+  const labelTickRef = useRef(0);
+  const [labelTick, setLabelTick] = useState(0);
+  const [launchGuideVisible, setLaunchGuideVisible] = useState(false);
+  const plantHoldStartRef = useRef<number | null>(null);
+  const plantHoldTargetIdRef = useRef<number | null>(null);
+  const plantHoldActiveRef = useRef(false);
+  const plantHoldCompletedRef = useRef(false);
+  const spaceHoldKeyRef = useRef(false);
+  const launchGuideTargetRef = useRef<SpaceStar | null>(null);
+  const debugHoldLogAtRef = useRef(0);
+  const spaceHoldStateRef = useRef<SpacePlantHoldState>({
+    active: false,
+    progress: 0,
+    target: null,
+  });
+  const aimSampleStep = Math.max(1, Math.min(8, Math.round(settings.aimSampleStep || 1)));
+
+  const toHeadingDeg = (vector: Vector3) => {
+    const rawDeg = (Math.atan2(vector.x, vector.z) * 180) / Math.PI;
+    return (rawDeg + 360) % 360;
+  };
+
+  const toPitchDeg = (vector: Vector3) => {
+    return (Math.asin(Math.max(-1, Math.min(1, vector.y))) * 180) / Math.PI;
+  };
+
   const controller = useMemo(() => new SpaceshipController(), []);
   const tpsCamera = useMemo(() => new TPSCamera(), []);
   const inputRef = useInput();
@@ -49,448 +259,818 @@ export const SpaceScene = ({
   const backgroundStarRef = useRef<any>(null);
   const { camera } = useThree();
 
-  const BACKGROUND_CELESTIAL_STAR_COUNT = 1800;
-  const BACKGROUND_GRAIN_STAR_COUNT = 600;
-  const BACKGROUND_STAR_RADIUS_MIN = 900;
-  const BACKGROUND_STAR_RADIUS_MAX = 2200;
-  const CAMERA_FAR_DISTANCE = 5000;
-
-  const skyDomeTexture = useMemo(() => {
-    const width = 2048;
-    const height = 1024;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    const base = ctx.createLinearGradient(0, 0, 0, height);
-    base.addColorStop(0, '#01040b');
-    base.addColorStop(0.5, '#020814');
-    base.addColorStop(1, '#020208');
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, width, height);
-
-    for (let i = 0; i < 8; i++) {
-      const y = height * (0.28 + i * 0.055);
-      const band = ctx.createRadialGradient(width * 0.5, y, width * 0.06, width * 0.5, y, width * 0.6);
-      band.addColorStop(0, 'rgba(150, 185, 255, 0.09)');
-      band.addColorStop(0.45, 'rgba(98, 132, 225, 0.06)');
-      band.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = band;
-      ctx.fillRect(0, 0, width, height);
-    }
-
-    const drawStar = (x: number, y: number, size: number, alpha: number) => {
-      const t = Math.random();
-      let rgb = '255,255,255';
-      if (t < 0.15) rgb = '255,235,196';
-      else if (t < 0.35) rgb = '198,220,255';
-      ctx.fillStyle = `rgba(${rgb},${alpha})`;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
-    for (let i = 0; i < 5200; i++) {
-      const x = Math.random() * width;
-      const y = Math.random() * height;
-      const size = Math.random() < 0.95 ? 0.2 + Math.random() * 1.1 : 1.1 + Math.random() * 1.8;
-      const alpha = Math.random() < 0.2 ? 0.85 + Math.random() * 0.15 : 0.35 + Math.random() * 0.35;
-      drawStar(x, y, size, alpha);
-    }
-
-    const texture = new CanvasTexture(canvas);
-    texture.minFilter = LinearFilter;
-    texture.magFilter = LinearFilter;
-    texture.generateMipmaps = false;
-    texture.needsUpdate = true;
-    return texture;
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      skyDomeTexture?.dispose();
-    };
-  }, [skyDomeTexture]);
-
-  const backgroundStars = useMemo(() => {
-    const makeShellStars = (
-      count: number,
-      radiusMin: number,
-      radiusMax: number,
-      tint: 'icy' | 'golden',
-    ) => {
-      const total = count * 3;
-      const positions = new Float32Array(total);
-      const colors = new Float32Array(total);
-
-      for (let i = 0; i < count; i++) {
-        const i3 = i * 3;
-
-        const theta = Math.random() * Math.PI * 2;
-        const z = Math.random() * 2 - 1;
-        const sinPhi = Math.sqrt(1 - Math.min(1, z * z));
-        const radius = radiusMin + Math.pow(Math.random(), 1.2) * (radiusMax - radiusMin);
-
-        const x = radius * sinPhi * Math.cos(theta);
-        const y = radius * z;
-        const w = radius * sinPhi * Math.sin(theta);
-
-        positions[i3] = x;
-        positions[i3 + 1] = y;
-        positions[i3 + 2] = w;
-
-        const glow = 0.45 + Math.random() * 0.55;
-        if (tint === 'icy') {
-          colors[i3] = 0.62 + glow * 0.28;
-          colors[i3 + 1] = 0.75 + glow * 0.2;
-          colors[i3 + 2] = 0.95 + glow * 0.05;
-        } else {
-          colors[i3] = 0.9 + glow * 0.08;
-          colors[i3 + 1] = 0.82 + glow * 0.15;
-          colors[i3 + 2] = 0.75 + glow * 0.2;
-        }
-      }
-
-      return { positions, colors };
-    };
-
-    return {
-      celestial: makeShellStars(BACKGROUND_CELESTIAL_STAR_COUNT, BACKGROUND_STAR_RADIUS_MIN, BACKGROUND_STAR_RADIUS_MAX, 'icy'),
-      grain: makeShellStars(BACKGROUND_GRAIN_STAR_COUNT, BACKGROUND_STAR_RADIUS_MIN * 0.8, BACKGROUND_STAR_RADIUS_MAX * 0.8, 'golden'),
-    };
-  }, []);
-
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
   const aimedStarRef = useRef<number | null>(null);
   const telemetryAccumRef = useRef(0);
+  const debugAimLogAtRef = useRef(0);
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
-  const labelVisibleKeyRef = useRef('');
-  const MAX_VISIBLE_LABELS = 12;
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
-  
-  const [stars, setStars] = useState<any[]>([]);
-  const starsRef = useRef<any[]>([]);
+  const [stars, setStars] = useState<SpaceStar[]>([]);
+  const starsRef = useRef<SpaceStar[]>([]);
+  const starsByIdRef = useRef<Map<number, SpaceStar>>(new Map());
+  const starGeometry = useMemo(
+    () => new SphereGeometry(STAR_MESH_RADIUS * starScale, starSegments, starSegments),
+    [starSegments, starScale],
+  );
+
+  const backgroundStars = useMemo(() => {
+    const total = Math.max(180, Math.round(BACKGROUND_STAR_COUNT * density));
+    const positions = new Float32Array(total * 3);
+    const colors = new Float32Array(total * 3);
+
+    for (let i = 0; i < total; i++) {
+      const i3 = i * 3;
+
+      const u = Math.random() * Math.PI * 2;
+      const v = Math.random() * 2 - 1;
+      const phi = Math.acos(v);
+      const radius =
+        BACKGROUND_STAR_RADIUS_MIN + Math.random() * (BACKGROUND_STAR_RADIUS_MAX - BACKGROUND_STAR_RADIUS_MIN);
+
+      const sinPhi = Math.sin(phi);
+      const x = radius * sinPhi * Math.cos(u);
+      const y = radius * Math.cos(phi);
+      const z = radius * sinPhi * Math.sin(u);
+
+      positions[i3] = x;
+      positions[i3 + 1] = y;
+      positions[i3 + 2] = z;
+
+      const glow = 0.55 + Math.random() * 0.45;
+      colors[i3] = 0.75 + glow * 0.25;
+      colors[i3 + 1] = 0.85 + glow * 0.15;
+      colors[i3 + 2] = 1.0;
+    }
+
+    return { positions, colors };
+  }, [density]);
 
   useEffect(() => {
-    const perspective = camera as PerspectiveCamera;
-    if (perspective.far !== CAMERA_FAR_DISTANCE) {
-      perspective.far = CAMERA_FAR_DISTANCE;
-      perspective.updateProjectionMatrix();
-    }
-  }, [camera]);
+    starsRef.current = stars;
+    starsByIdRef.current = createStarLookup(stars);
+  }, [stars]);
 
   useEffect(() => {
     const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
     fetch(starsUrl)
-        .then(res => res.json())
-        .then(data => {
-            const loadedStars = data.map((s: any) => ({
-                ...s,
-                position: new Vector3(s.x, s.y, s.z)
-            }));
-            setStars(loadedStars);
-            starsRef.current = loadedStars;
-        })
-        .catch(err => console.error("Failed to load stars:", err));
-  }, []);
+      .then((res) => res.json())
+      .then((data) => {
+        const loadedStars = data.map(
+          (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => {
+            const params = SemanticMapper.mapCoordinatesToParams(s.x, s.y, s.z);
+            const resolvedColor = resolveStarColor(getStarColor(s.x, s.y, s.z), s.color);
+            return {
+              id: s.id,
+              word: s.word,
+              color: resolvedColor,
+              params,
+              embedding: buildStarEmbedding(params, new Vector3(s.x, s.y, s.z), resolvedColor),
+              position: new Vector3(s.x, s.y, s.z),
+            };
+          }
+        );
+        setStars(loadedStars);
+        if (debugEnabled) {
+          console.debug('[SpaceScene] loaded stars', { total: loadedStars.length });
+        }
+      })
+      .catch((err) => console.error('Failed to load stars:', err));
+  }, [debugEnabled]);
 
   useFrame((_, delta) => {
     controller.update(delta, inputRef.current);
     if (shipRef.current) {
-        shipRef.current.position.copy(controller.position);
-        shipRef.current.quaternion.copy(controller.quaternion);
+      shipRef.current.position.copy(controller.position);
+      shipRef.current.quaternion.copy(controller.quaternion);
     }
-    tpsCamera.update(camera as PerspectiveCamera, controller);
     if (backgroundStarRef.current) {
-        backgroundStarRef.current.position.copy(camera.position);
-        backgroundStarRef.current.rotation.y += delta * 0.003;
-        backgroundStarRef.current.rotation.x += delta * 0.0008;
+      backgroundStarRef.current.position.copy(camera.position);
     }
+    tpsCamera.update(camera as PerspectiveCamera, controller, delta);
+    const forward = controller.getForwardVector();
+    const appliedSpeed = controller.speed;
+    const velocity = {
+      x: forward.x * appliedSpeed,
+      y: forward.y * appliedSpeed,
+      z: forward.z * appliedSpeed,
+    };
 
     telemetryAccumRef.current += delta;
     if (telemetryAccumRef.current >= 0.1) {
+      const headingDeg = toHeadingDeg(forward);
+      const pitchDeg = toPitchDeg(forward);
       onTelemetryChange({
-        speed: controller.speed,
+        speed: appliedSpeed,
         position: {
           x: controller.position.x,
           y: controller.position.y,
-          z: controller.position.z
-        }
+          z: controller.position.z,
+        },
+        velocity,
+        headingDeg,
+        pitchDeg,
       });
       telemetryAccumRef.current = 0;
     }
 
-    const forward = controller.getForwardVector();
-    const bestTarget = SelectionSystem.getBestTarget(controller.position, forward, stars);
+    const candidates: AimCandidate[] = labelsEnabled ? [] : [];
+    let bestTargetId: number | null = null;
+    let bestDist = Infinity;
+    let bestTargetDist = Infinity;
+    let nearestId: number | null = null;
+    let nearestDist = Infinity;
+    const toStar = new Vector3();
+    const visibleIds: number[] = [];
+    const fullStars = starsRef.current;
+    const sampleStep = aimSampleStep;
 
-    const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * 1.2;
-    const labelConeCosThreshold = Math.cos(labelConeAngle);
-    const labelConeLength = 50 * 14;
-    const visibleCandidates: Array<{ id: number; dot: number; dist: number }> = [];
-    for (const star of starsRef.current) {
-      const toStar = new Vector3().subVectors(star.position, controller.position);
+    for (let i = 0; i < fullStars.length; i += 1) {
+      const star = fullStars[i];
+      toStar.subVectors(star.position, controller.position);
       const dist = toStar.length();
-      if (dist === 0 || dist > labelConeLength) continue;
-      toStar.normalize();
-      const dot = forward.dot(toStar);
-      if (dot > labelConeCosThreshold) {
-        visibleCandidates.push({ id: star.id, dot, dist });
+      if (dist === 0) {
+        continue;
+      }
+
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestId = star.id;
+      }
+
+      const dir = toStar.normalize();
+      const dot = forward.dot(dir);
+
+      if (dot > targetConeCos && dist < bestDist) {
+        bestDist = dist;
+        bestTargetId = star.id;
+        bestTargetDist = dist;
+      }
+      if ((i % sampleStep) === 0 && dot > labelConeCos && dist <= labelConeLength) {
+        insertCandidate(candidates, { id: star.id, dot, dist }, maxVisibleLabels);
       }
     }
-    visibleCandidates.sort((a, b) => {
-      if (b.dot !== a.dot) return b.dot - a.dot;
-      return a.dist - b.dist;
-    });
-    const visibleIds = visibleCandidates.slice(0, MAX_VISIBLE_LABELS).map((v) => v.id);
-    const visibleKey = visibleIds.join(',');
-    if (visibleKey !== labelVisibleKeyRef.current) {
-      setLabelVisibleStarIds(new Set(visibleIds));
-      labelVisibleKeyRef.current = visibleKey;
+
+    labelTickRef.current += 1;
+    if (labelTickRef.current >= 4) {
+      if (labelTickRef.current >= 4) {
+        labelTickRef.current = 0;
+        setLabelTick((current) => current + 1);
+      }
     }
-    
-    if (bestTarget !== aimedStarRef.current) {
-        setAimedStarId(bestTarget);
-        aimedStarRef.current = bestTarget;
-        
-        if (bestTarget !== null) {
-            const star = starsRef.current.find(s => s.id === bestTarget);
-            if (star) {
-                const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-                onAimChange({ color: star.color, params, word: star.word });
-            }
-        } else {
-            onAimChange(null);
+
+    if (labelsEnabled && candidates.length === 0 && nearestId !== null) {
+      insertCandidate(candidates, { id: nearestId, dot: 1, dist: nearestDist }, maxVisibleLabels);
+    }
+    if (bestTargetId === null && nearestId !== null) {
+      bestTargetId = nearestId;
+      bestTargetDist = nearestDist;
+    }
+
+    for (const candidate of candidates) {
+      visibleIds.push(candidate.id);
+    }
+
+    const nextVisibleIds = new Set<number>(visibleIds);
+    if (labelsEnabled && bestTargetId !== null && !nextVisibleIds.has(bestTargetId)) {
+      nextVisibleIds.add(bestTargetId);
+    }
+
+    let labelsChanged = false;
+    if (nextVisibleIds.size !== labelVisibleStarIds.size) {
+      labelsChanged = true;
+    } else {
+      for (const id of nextVisibleIds) {
+        if (!labelVisibleStarIds.has(id)) {
+          labelsChanged = true;
+          break;
         }
+      }
+    }
+
+    if (labelsEnabled) {
+      if (labelsChanged) {
+        setLabelVisibleStarIds(nextVisibleIds);
+      }
+    } else if (labelVisibleStarIds.size !== 0) {
+      setLabelVisibleStarIds(new Set());
+    }
+
+    if (debugEnabled && nowMs() - debugAimLogAtRef.current >= 1000) {
+      console.debug('[SpaceScene] aim/label state', {
+        labelsEnabled,
+        candidateCount: fullStars.length,
+        totalStars: starsRef.current.length,
+        labelVisibleTargetCount: visibleIds.length,
+        aimedStarId: bestTargetId,
+        bestTargetDist: Number.isFinite(bestTargetDist) ? Math.round(bestTargetDist * 1000) / 1000 : null,
+        candidatesReady: candidates.length,
+      });
+      debugAimLogAtRef.current = nowMs();
+    }
+
+    const currentAimedId = bestTargetId;
+
+    if (currentAimedId !== aimedStarRef.current) {
+      setAimedStarId(bestTargetId);
+      aimedStarRef.current = bestTargetId;
+    }
+
+    if (spaceHoldKeyRef.current && launchGuideTargetRef.current === null && currentAimedId !== null) {
+      launchGuideTargetRef.current = starsByIdRef.current.get(currentAimedId) ?? null;
+      setLaunchGuideVisible(launchGuideTargetRef.current !== null);
+    }
+
+    if (!spaceHoldKeyRef.current && launchGuideVisible) {
+      launchGuideVisible && setLaunchGuideVisible(false);
+      launchGuideTargetRef.current = null;
+    }
+
+    if (currentAimedId !== null) {
+      if (aimedStarRef.current === currentAimedId) {
+        const star = starsByIdRef.current.get(bestTargetId);
+        if (star) {
+          const offset = star.position.clone().sub(controller.position);
+          const headingOffsetDeg = toHeadingDeg(offset);
+          const payload: AimPayload = {
+            id: star.id,
+            color: star.color,
+            params: star.params,
+            embedding: star.embedding,
+            word: star.word,
+            distance: Number.isFinite(bestTargetDist) ? bestTargetDist : undefined,
+            headingOffsetDeg,
+          };
+          onAimChange(payload);
+        }
+      }
+      if (plantHoldActiveRef.current && plantHoldTargetIdRef.current !== currentAimedId) {
+        plantHoldActiveRef.current = false;
+        plantHoldCompletedRef.current = false;
+        plantHoldStartRef.current = null;
+        const empty = null;
+        spaceHoldStateRef.current = { active: false, progress: 0, target: empty };
+        if (onPlantHoldEvent) {
+          const target = starsByIdRef.current.get(plantHoldTargetIdRef.current as number);
+          onPlantHoldEvent({
+            type: 'cancel',
+            target: target
+              ? {
+                  id: target.id,
+                  word: target.word,
+                  color: target.color,
+                  params: target.params,
+                  embedding: target.embedding,
+                  distance: undefined,
+                  headingOffsetDeg: toHeadingDeg(target.position.clone().sub(controller.position)),
+                }
+              : null,
+          });
+        }
+        plantHoldTargetIdRef.current = null;
+        onPlantHold?.(spaceHoldStateRef.current);
+        launchGuideTargetRef.current = null;
+        setLaunchGuideVisible(false);
+      }
+    } else if (!currentAimedId) {
+      onAimChange(null);
+      if (plantHoldActiveRef.current) {
+        plantHoldActiveRef.current = false;
+        plantHoldCompletedRef.current = false;
+        plantHoldStartRef.current = null;
+        plantHoldTargetIdRef.current = null;
+        const idle = { active: false, progress: 0, target: null };
+        spaceHoldStateRef.current = idle;
+        if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
+        onPlantHold?.(idle);
+        launchGuideTargetRef.current = null;
+        setLaunchGuideVisible(false);
+      } else {
+        setLaunchGuideVisible(false);
+      }
+    }
+
+    const now = nowMs();
+    if (plantHoldActiveRef.current && onPlantHold) {
+      const holdTarget = plantHoldTargetIdRef.current;
+      if (holdTarget !== null) {
+        const elapsed = now - (plantHoldStartRef.current || now);
+        const progress = clamp01(elapsed / PLANT_HOLD_DURATION_MS);
+        const star = starsByIdRef.current.get(holdTarget);
+        if (star) {
+          const dist = star.position.distanceTo(controller.position);
+          const targetPayload: AimPayload = {
+            id: holdTarget,
+            word: star.word,
+            color: star.color,
+            params: star.params,
+            embedding: star.embedding,
+            distance: dist,
+            headingOffsetDeg: toHeadingDeg(star.position.clone().sub(controller.position)),
+          };
+          const nextHoldState: SpacePlantHoldState = { active: true, progress, target: targetPayload };
+          spaceHoldStateRef.current = nextHoldState;
+          onPlantHold(nextHoldState);
+
+          if (progress >= 1 && !plantHoldCompletedRef.current) {
+            const canPlace = canPlant ? canPlant() : true;
+            if (canPlace) {
+              plantHoldCompletedRef.current = true;
+              plantHoldActiveRef.current = false;
+              plantHoldStartRef.current = null;
+              plantHoldTargetIdRef.current = null;
+              spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
+              if (onPlantHoldEvent) onPlantHoldEvent({ type: 'complete', target: targetPayload });
+              selectAimedStar(holdTarget);
+              onPlantHold(spaceHoldStateRef.current);
+              launchGuideTargetRef.current = null;
+              setLaunchGuideVisible(false);
+            } else {
+              plantHoldCompletedRef.current = false;
+              plantHoldActiveRef.current = false;
+              plantHoldStartRef.current = null;
+              plantHoldTargetIdRef.current = null;
+              spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
+              if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
+              onPlantHold(spaceHoldStateRef.current);
+              launchGuideTargetRef.current = null;
+              setLaunchGuideVisible(false);
+            }
+          }
+        } else {
+          plantHoldActiveRef.current = false;
+          plantHoldCompletedRef.current = false;
+          plantHoldStartRef.current = null;
+          plantHoldTargetIdRef.current = null;
+          const idle = { active: false, progress: 0, target: null };
+          spaceHoldStateRef.current = idle;
+          if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
+          onPlantHold(idle);
+          launchGuideTargetRef.current = null;
+          setLaunchGuideVisible(false);
+        }
+      }
+    } else {
+      if (spaceHoldStateRef.current.active !== false || spaceHoldStateRef.current.progress !== 0) {
+        const idle = { active: false, progress: 0, target: null };
+        spaceHoldStateRef.current = idle;
+        onPlantHold?.(idle);
+        launchGuideTargetRef.current = null;
+        setLaunchGuideVisible(false);
+      }
+    }
+
+    if (debugEnabled && now - debugHoldLogAtRef.current >= 1000) {
+      debugHoldLogAtRef.current = now;
+      console.debug('[SpaceScene] plant-hold state', {
+        holdActive: plantHoldActiveRef.current,
+        holdTargetId: plantHoldTargetIdRef.current,
+        holdProgress: Math.round(spaceHoldStateRef.current.progress * 100),
+      });
     }
   });
 
+  const selectAimedStar = (overrideId?: number | null) => {
+    const currentAimedId = overrideId ?? aimedStarRef.current;
+    if (currentAimedId === null) return;
+
+    const star = starsByIdRef.current.get(currentAimedId);
+    if (!star) return;
+
+    onSelectStar({ id: star.id, color: star.color, params: star.params, word: star.word });
+    if (launchTrailLimit <= 0) return;
+    setLaunchEffects((prev) => {
+      const keepFrom = Math.max(1, launchTrailLimit) - 1;
+      return [...prev.slice(-keepFrom),
+        {
+          id: makeLaunchId(),
+          start: new Vector3().copy(controller.position),
+          target: new Vector3().copy(star.position),
+          elapsed: 0,
+          duration: 1.45,
+        }
+      ];
+    });
+  };
+
   useEffect(() => {
-      const selectAimedStar = () => {
-          const currentAimedId = aimedStarRef.current;
-          if (currentAimedId === null) return;
+    const requestPlant = () => {
+      if (canPlant && !canPlant()) {
+        setLaunchGuideVisible(false);
+        return;
+      }
+      const currentAimedId = aimedStarRef.current;
+      if (currentAimedId === null) {
+        setLaunchGuideVisible(false);
+        return;
+      }
+      if (plantHoldActiveRef.current) {
+        setLaunchGuideVisible(true);
+        return;
+      }
 
-          const star = starsRef.current.find(s => s.id === currentAimedId);
-          if (!star) return;
+      const star = starsByIdRef.current.get(currentAimedId);
+      if (!star) return;
 
-          const params = SemanticMapper.mapCoordinatesToParams(star.position.x, star.position.y, star.position.z);
-          const selectedStarData = { color: star.color, params, word: star.word };
-          setLaunchEffects((prev) => [
-              ...prev.slice(-6),
-              {
-                  id: makeLaunchId(),
-                  start: new Vector3().copy(controller.position),
-                  target: new Vector3().copy(star.position),
-                  elapsed: 0,
-                  duration: 1.45,
-                  selectedStarData,
-              }
-          ]);
+      const now = nowMs();
+      plantHoldActiveRef.current = true;
+      plantHoldCompletedRef.current = false;
+      plantHoldStartRef.current = now;
+      plantHoldTargetIdRef.current = currentAimedId;
+      launchGuideTargetRef.current = star;
+      const targetPayload: AimPayload = {
+        id: currentAimedId,
+        word: star.word,
+        color: star.color,
+        params: star.params,
+        embedding: star.embedding,
       };
+      const initialState: SpacePlantHoldState = { active: true, progress: 0, target: targetPayload };
+      spaceHoldStateRef.current = initialState;
+      setLaunchGuideVisible(true);
+      onPlantHold?.(initialState);
+      if (onPlantHoldEvent) onPlantHoldEvent({ type: 'start', target: targetPayload });
+      onAimChange(targetPayload);
+    };
 
-      const handleKeyDown = (event: KeyboardEvent) => {
-          if (event.code !== 'Space' && event.key !== ' ') return;
-          if (event.repeat) return;
-          event.preventDefault();
-          selectAimedStar();
-      };
+    const releasePlant = () => {
+      if (!plantHoldActiveRef.current) return;
+      const target = plantHoldTargetIdRef.current !== null ? starsByIdRef.current.get(plantHoldTargetIdRef.current) : null;
+      const targetPayload = target
+        ? {
+          id: target.id,
+          word: target.word,
+          color: target.color,
+          params: target.params,
+          embedding: target.embedding,
+          distance: target.position.distanceTo(controller.position),
+          headingOffsetDeg: toHeadingDeg(target.position.clone().sub(controller.position)),
+        }
+        : null;
 
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-          window.removeEventListener('keydown', handleKeyDown);
-      };
-  }, [onSelectStar, controller]);
+      plantHoldActiveRef.current = false;
+      plantHoldCompletedRef.current = false;
+      plantHoldStartRef.current = null;
+      plantHoldTargetIdRef.current = null;
+      const idle = { active: false, progress: 0, target: null };
+      spaceHoldStateRef.current = idle;
+      onPlantHold?.(idle);
+      if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
+      launchGuideTargetRef.current = null;
+      setLaunchGuideVisible(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isSpaceKey(event) || event.repeat) return;
+      spaceHoldKeyRef.current = true;
+      event.preventDefault();
+      requestPlant();
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!isSpaceKey(event)) return;
+      spaceHoldKeyRef.current = false;
+      event.preventDefault();
+      releasePlant();
+      setLaunchGuideVisible(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      spaceHoldKeyRef.current = false;
+      launchGuideTargetRef.current = null;
+      setLaunchGuideVisible(false);
+    };
+  }, [controller, launchTrailLimit, onAimChange, onPlantHold, onPlantHoldEvent, selectAimedStar, canPlant]);
 
   useFrame((_, delta) => {
     if (launchEffects.length === 0) return;
-    const completedEffects: LaunchEffect[] = [];
 
     setLaunchEffects((currentEffects) =>
       currentEffects
         .map((effect) => {
           const nextElapsed = effect.elapsed + delta;
-          if (nextElapsed >= effect.duration) {
-            completedEffects.push(effect);
-            return null;
-          }
+          if (nextElapsed >= effect.duration) return null;
           return { ...effect, elapsed: nextElapsed };
         })
         .filter((effect): effect is LaunchEffect => effect !== null)
     );
-
-    if (completedEffects.length > 0) {
-      completedEffects.forEach((effect) => {
-        onSelectStar(effect.selectedStarData);
-      });
-    }
   });
 
   const getLaunchPosition = (effect: LaunchEffect): Vector3 => {
-      const progress = clamp01(effect.elapsed / effect.duration);
-      const outboundRatio = 0.55;
-      const shipPosition = shipRef.current?.position ?? new Vector3();
+    const progress = clamp01(effect.elapsed / effect.duration);
+    const outboundRatio = 0.55;
+    const shipPosition = shipRef.current?.position ?? new Vector3();
 
-      if (progress <= outboundRatio) {
-          const segmentT = easeOutCubic(clamp01(progress / outboundRatio));
-          return effect.start.clone().lerp(effect.target, segmentT);
+    if (progress <= outboundRatio) {
+      const segmentT = easeOutCubic(clamp01(progress / outboundRatio));
+      return effect.start.clone().lerp(effect.target, segmentT);
+    }
+
+    const segmentT = easeOutCubic(clamp01((progress - outboundRatio) / (1 - outboundRatio)));
+    return effect.target.clone().lerp(shipPosition, segmentT);
+  };
+
+  const starLabels = useMemo(() => {
+    if (!labelsEnabled) {
+      return [];
+    }
+
+    const visibleIds = new Set(labelVisibleStarIds);
+    const now = nowMs();
+    const revealStartAtById = labelRevealStartAtRef.current;
+    const toRemove: number[] = [];
+    for (const [id, startedAt] of revealStartAtById.entries()) {
+      if (!visibleIds.has(id) && now - startedAt > LABEL_REVEAL_MS * 2) {
+        toRemove.push(id);
       }
+    }
+    for (const id of toRemove) {
+      revealStartAtById.delete(id);
+    }
 
-      const segmentT = easeOutCubic(clamp01((progress - outboundRatio) / (1 - outboundRatio)));
-      return effect.target.clone().lerp(shipPosition, segmentT);
-  };
+    if (aimedStarId !== null) {
+      visibleIds.add(aimedStarId);
+    }
 
-  const coneHeight = 50 * 14;
-  const coneRadius = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * coneHeight;
-  const getLabelFontSize = (distance: number) => {
-    const c = CONFIG.TEXT_MIN_FONT_SIZE;
-    const d1 = CONFIG.TEXT_SIZE_BREAKPOINT;
-    const a = CONFIG.TEXT_LINEAR_FONT_SLOPE;
-    const raw = distance < d1 ? c : a * distance;
-    return Math.min(CONFIG.TEXT_MAX_FONT_SIZE, Math.max(c, raw));
-  };
+    for (const id of visibleIds) {
+      if (!revealStartAtById.has(id)) {
+        revealStartAtById.set(id, now);
+      }
+    }
+
+    const lodStart = Math.max(1, CONFIG.TEXT_LOD_DISTANCE);
+    const lodEnd = Math.max(lodStart + 160, labelConeLength * 0.94);
+
+    const labels = [...visibleIds]
+      .map((id) => {
+        const star = starsByIdRef.current.get(id);
+        if (!star) return null;
+        const dist = star.position.distanceTo(controller.position);
+        const baseLod = 1 - clamp01((dist - lodStart) / (lodEnd - lodStart));
+        const startedAt = revealStartAtById.get(id) || now;
+        const revealProgress = clamp01(
+          startedAt + LABEL_REVEAL_MS > now ? (now - startedAt) / LABEL_REVEAL_MS : 1,
+        );
+        const lodFactor = Math.pow(clamp01(baseLod), 0.8);
+        const opacity = clamp01(lodFactor * (0.3 + 0.7 * Math.pow(revealProgress, 0.7)));
+        const sizeFactor = Math.pow(clamp01(baseLod), 0.55);
+        const finalFontSize = Math.max(labelFontMin, Math.round(labelFontSize * (0.4 + 0.6 * sizeFactor)));
+
+        const isAimed = id === aimedStarId;
+        const revealOpacity = Math.max(0, Math.min(1, opacity));
+        const scale = 0.94 + (isAimed ? 0.12 : 0.08) * lodFactor;
+        return (
+          <Html
+            key={star.id}
+            position={star.position.toArray()}
+            distanceFactor={18}
+            occlude={false}
+            zIndexRange={[0, 1000]}
+          >
+              <div
+                className="space-label-ink"
+                style={{
+                  ...(CONFIG.TEXT_STYLE as any),
+                  fontSize: `${finalFontSize}px`,
+                  transform: `translate(${labelOffsetX}px, ${labelOffsetY}px) scale(${scale})`,
+                  color: '#f8fcff',
+                  background: 'rgba(5, 16, 26, 0.78)',
+                  padding: '3px 8px',
+                border: '1px solid rgba(136, 205, 255, 0.8)',
+                borderRadius: '6px',
+                  transformOrigin: 'center left',
+                  opacity: revealOpacity,
+                  transition: 'opacity 0.12s linear, transform 0.12s linear',
+                boxShadow: '0 0 10px rgba(136, 205, 255, 0.45)',
+              }}
+            >
+              {star.word}
+            </div>
+        </Html>
+      );
+      })
+      .filter((label) => label !== null);
+    return labels;
+    }, [labelTick, aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
+
+  const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
+  const launchGuideStart = shipRef.current
+    ? shipRef.current.localToWorld(LAUNCH_GUIDE_OFFSET.clone())
+    : controller.position.clone();
+  const launchGuideTarget = spaceHoldKeyRef.current ? launchGuideTargetRef.current : null;
+  const showLaunchGuide = launchGuideVisible && launchGuideTarget !== null;
 
   return (
     <>
-      <group ref={shipRef}>
-        <mesh position={[0, 0, 1.05]} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
-          <coneGeometry args={[0.6, 1.1, 16]} />
-          <meshStandardMaterial color="#ffffff" metalness={0.8} roughness={0.15} emissive="#ffb35a" emissiveIntensity={0.35} />
-        </mesh>
+      <group ref={shipRef} scale={shipScale}>
+        <group>
+          <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <capsuleGeometry args={[0.28, 1.6, 12, 22]} />
+            {useHighQualityShip ? (
+              <meshPhysicalMaterial
+                color="#a3cfff"
+                metalness={0.82}
+                roughness={0.18}
+                clearcoat={1}
+                clearcoatRoughness={0.12}
+                emissive="#0f3a5f"
+                emissiveIntensity={0.16}
+              />
+            ) : (
+              <meshBasicMaterial color="#a3cfff" />
+            )}
+          </mesh>
 
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.45, 0.7, 2.4, 24]} />
-          <meshStandardMaterial color="#2cffea" metalness={0.55} roughness={0.2} emissive="#005f87" emissiveIntensity={0.5} />
-        </mesh>
+          <mesh position={[0, 0, 1.18]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.32, 0.7, 28]} />
+            {useHighQualityShip ? (
+              <meshPhysicalMaterial
+                color="#f8ffff"
+                metalness={0.2}
+                roughness={0.1}
+                emissive="#6bc8ff"
+                emissiveIntensity={0.45}
+                opacity={0.92}
+                transparent
+              />
+            ) : (
+              <meshBasicMaterial color="#f8ffff" />
+            )}
+          </mesh>
 
-        <mesh position={[0, 0, -1.75]} rotation={[-Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.5, 1.0, 16]} />
-          <meshStandardMaterial color="#7b5bff" metalness={0.4} roughness={0.25} emissive="#260033" emissiveIntensity={0.35} />
-        </mesh>
+          <mesh position={[0, 0, -1.16]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.44, 1.0, 20]} />
+            {useHighQualityShip ? (
+              <meshPhysicalMaterial
+                color="#1d2f6b"
+                metalness={0.75}
+                roughness={0.2}
+                emissive="#1f104a"
+                emissiveIntensity={0.25}
+              />
+            ) : (
+              <meshBasicMaterial color="#1d2f6b" />
+            )}
+          </mesh>
 
-        <mesh position={[0.9, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <boxGeometry args={[1.2, 0.13, 0.25]} />
-          <meshStandardMaterial color="#ffea00" metalness={0.35} roughness={0.2} emissive="#5a4a00" emissiveIntensity={0.35} />
-        </mesh>
-        <mesh position={[-0.9, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
-          <boxGeometry args={[1.2, 0.13, 0.25]} />
-          <meshStandardMaterial color="#ffea00" metalness={0.35} roughness={0.2} emissive="#5a4a00" emissiveIntensity={0.35} />
-        </mesh>
+          <mesh position={[0, -0.08, -1.08]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.16, 0.08, 0.5, 16]} />
+            {useHighQualityShip ? (
+              <meshStandardMaterial
+                color="#ff9b2d"
+                metalness={0.8}
+                roughness={0.12}
+                emissive="#7a2600"
+                emissiveIntensity={0.65}
+              />
+            ) : (
+              <meshBasicMaterial color="#ff9b2d" />
+            )}
+          </mesh>
 
-        <mesh position={[0, 0.32, 0]} rotation={[0, Math.PI / 4, 0]}>
-          <cylinderGeometry args={[0.09, 0.09, 0.85, 12]} />
-          <meshStandardMaterial color="#4be6ff" metalness={0.15} roughness={0.2} emissive="#0d4458" emissiveIntensity={0.8} />
-        </mesh>
+          <mesh position={[-0.42, 0.1, -0.06]} rotation={[-0.25, 0.2, -0.1]}>
+            <boxGeometry args={[0.42, 0.06, 0.72]} />
+            {useHighQualityShip ? (
+              <meshPhysicalMaterial
+                color="#2f5f9e"
+                metalness={0.9}
+                roughness={0.2}
+                emissive="#143e65"
+                emissiveIntensity={0.35}
+              />
+            ) : (
+              <meshBasicMaterial color="#2f5f9e" />
+            )}
+          </mesh>
+          <mesh position={[0.42, 0.1, -0.06]} rotation={[-0.25, -0.2, 0.1]}>
+            <boxGeometry args={[0.42, 0.06, 0.72]} />
+            {useHighQualityShip ? (
+              <meshPhysicalMaterial
+                color="#2f5f9e"
+                metalness={0.9}
+                roughness={0.2}
+                emissive="#143e65"
+                emissiveIntensity={0.35}
+              />
+            ) : (
+              <meshBasicMaterial color="#2f5f9e" />
+            )}
+          </mesh>
 
-        <mesh position={[0, -0.24, 0.1]} rotation={[0, 0, Math.PI]}>
-          <sphereGeometry args={[0.22, 16, 16]} />
-          <meshStandardMaterial color="#f4fdff" metalness={0.25} roughness={0.15} emissive="#103a60" emissiveIntensity={0.4} />
-        </mesh>
+          <mesh position={[0, 0.08, 0.34]} rotation={[-0.65, 0, 0]}>
+            <sphereGeometry args={[0.34, 26, 18]} />
+            {useHighQualityShip ? (
+              <meshPhysicalMaterial
+                color="#d9f7ff"
+                metalness={0.05}
+                roughness={0.18}
+                transmission={0.35}
+                clearcoat={1}
+              />
+            ) : (
+              <meshBasicMaterial color="#d9f7ff" />
+            )}
+          </mesh>
 
+          <mesh position={[0, 0.17, 0.78]} rotation={[0, 0, 0]}>
+            <ringGeometry args={[0.08, 0.23, 24]} />
+            <meshBasicMaterial color="#79d5ff" transparent opacity={0.55} />
+          </mesh>
+          <mesh position={[0, 0.05, -1.62]} rotation={[0, 0, 0]}>
+            <ringGeometry args={[0.1, 0.2, 24]} />
+            <meshBasicMaterial color="#ffbf6e" transparent opacity={0.35} />
+          </mesh>
+        </group>
 
         {debugMode && (
-          <mesh position={[0, 0, coneHeight / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-            <coneGeometry args={[coneRadius, coneHeight, 16, 1, true]} />
+          <mesh position={[0, 0, CONE_HEIGHT / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[CONE_RADIUS, CONE_HEIGHT, 16, 1, true]} />
             <meshBasicMaterial color="yellow" wireframe={true} transparent={true} opacity={0.3} />
           </mesh>
         )}
       </group>
 
-      <group ref={backgroundStarRef} frustumCulled={false}>
-        {skyDomeTexture && (
-          <mesh renderOrder={-30}>
-            <sphereGeometry args={[CAMERA_FAR_DISTANCE * 0.9, 48, 36]} />
-            <meshBasicMaterial
-              map={skyDomeTexture}
-              side={BackSide}
-              toneMapped={false}
-              transparent
-              opacity={0.96}
-              depthWrite={false}
-              depthTest={false}
-            />
-          </mesh>
-        )}
+      <points ref={backgroundStarRef} frustumCulled={false}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[backgroundStars.positions, 3]} />
+          <bufferAttribute attach="attributes-color" args={[backgroundStars.colors, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          size={settings.backgroundPointSize}
+          sizeAttenuation
+          vertexColors
+          transparent
+          depthWrite={false}
+          blending={AdditiveBlending}
+          opacity={0.9}
+        />
+      </points>
 
-        <points>
+      {stars.map((star) => (
+        <mesh
+          key={star.id}
+          position={star.position.toArray()}
+          geometry={starGeometry}
+          frustumCulled={false}
+        >
+          <meshBasicMaterial color={star.color} />
+        </mesh>
+      ))}
+      {starLabels}
+
+      {showTargetMarker && aimedStar && (
+        <Html
+          center
+          distanceFactor={25}
+          zIndexRange={[100, 2000]}
+          occlude={false}
+          position={aimedStar.position.toArray()}
+        >
+          <div
+            style={{
+              width: 700,
+              height: 700,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              border: '2px solid rgba(255, 255, 255, 0.42)',
+              background:
+                'radial-gradient(circle, rgba(255,255,255,0.45) 0%, rgba(140, 220, 255, 0.18) 52%, rgba(140, 220, 255, 0) 74%)',
+              boxShadow: '0 0 26px rgba(140, 220, 255, 0.28)',
+              pointerEvents: 'none',
+            }}
+          />
+        </Html>
+      )}
+
+      {showLaunchGuide && launchGuideTarget && (
+        <line>
           <bufferGeometry>
             <bufferAttribute
-              attach="attributes.position"
-              args={[backgroundStars.celestial.positions, 3]}
-            />
-            <bufferAttribute
-              attach="attributes.color"
-              args={[backgroundStars.celestial.colors, 3]}
-            />
-          </bufferGeometry>
-          <pointsMaterial
-            size={2.2}
-            sizeAttenuation={false}
-            vertexColors
-            toneMapped={false}
-            transparent
-            depthWrite={false}
-            depthTest={false}
-            blending={AdditiveBlending}
-            opacity={0.92}
-          />
-        </points>
-
-        <points>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes.position"
-              args={[backgroundStars.grain.positions, 3]}
-            />
-            <bufferAttribute
-              attach="attributes.color"
-              args={[backgroundStars.grain.colors, 3]}
+              attach="attributes-position"
+              args={[
+                new Float32Array([
+                  launchGuideStart.x,
+                  launchGuideStart.y,
+                  launchGuideStart.z,
+                  launchGuideTarget.position.x,
+                  launchGuideTarget.position.y,
+                  launchGuideTarget.position.z,
+                ]),
+                3,
+              ]}
             />
           </bufferGeometry>
-          <pointsMaterial
-            size={3.0}
-            sizeAttenuation={false}
-            vertexColors
-            toneMapped={false}
+          <lineBasicMaterial
+            color="#82f4ff"
             transparent
-            depthWrite={false}
+            opacity={0.78}
             depthTest={false}
-            blending={AdditiveBlending}
-            opacity={0.92}
           />
-        </points>
-      </group>
-
-      {stars.map((star) => {
-          const isAimed = star.id === aimedStarId;
-          const showText = labelVisibleStarIds.has(star.id) || isAimed;
-          const distanceToCamera = camera.position.distanceTo(star.position);
-          const labelFontSize = Math.round(getLabelFontSize(distanceToCamera));
-          
-          return (
-            <group key={star.id} position={star.position}>
-                <mesh>
-                    <sphereGeometry args={[1, 8, 8]} />
-                    <meshBasicMaterial color={star.color} />
-                </mesh>
-                
-                {isAimed && (
-                    <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI]}>
-                        <coneGeometry args={[1, 2, 4]} />
-                        <meshBasicMaterial color="white" />
-                    </mesh>
-                )}
-
-        {showText && (
-          <Html distanceFactor={10}>
-            <div style={{ ...(CONFIG.TEXT_STYLE as any), fontSize: `${labelFontSize}px` }}>
-              {star.word}
-            </div>
-          </Html>
-        )}
-      </group>
-    );
-      })}
+        </line>
+      )}
 
       {launchEffects.map((effect) => {
         const position = getLaunchPosition(effect);
@@ -503,8 +1083,8 @@ export const SpaceScene = ({
           </group>
         );
       })}
-      
-      <gridHelper args={[2000, 20]} />
+
+      {showGrid && <gridHelper args={[2000, gridLines]} />}
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
     </>
