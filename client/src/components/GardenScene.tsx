@@ -7,6 +7,12 @@ import { CONFIG } from '../config';
 import { Flower } from './Flower';
 import type { FlowerData } from '../modules/PersistenceService';
 
+const GARDEN_LABEL_FONT_SCALE = 2;
+const GARDEN_LABEL_FONT_SIZE = 270 * GARDEN_LABEL_FONT_SCALE;
+const GARDEN_LABEL_PADDING_X = 195 * GARDEN_LABEL_FONT_SCALE;
+const GARDEN_LABEL_PADDING_Y = 67.5 * GARDEN_LABEL_FONT_SCALE;
+const GARDEN_FLOWER_SCALE = 104;
+
 export const GardenScene = () => {
   const manager = useMemo(() => new GardenManager(), []);
   const { camera } = useThree();
@@ -103,16 +109,22 @@ export const GardenScene = () => {
 
         return (
           <group key={flower.id} position={[flower.x, flower.y, CONFIG.FLOWER_ANCHOR_Z]}>
-            <Flower params={flower.params} color={flower.color} scale={104} growth={growth} vitality={vitality} />
+            <Flower
+              params={flower.params}
+              color={flower.color}
+              scale={GARDEN_FLOWER_SCALE * (flower.scaleFactor ?? 1)}
+              growth={growth}
+              vitality={vitality}
+            />
             {flower.word && (
               <Html position={[labelOffsetX, labelOffsetY, 0.35]} center distanceFactor={22} transform>
                 <div
                   style={{
                     pointerEvents: 'none',
                     whiteSpace: 'nowrap',
-                    padding: '67.5px 195px',
+                    padding: `${GARDEN_LABEL_PADDING_Y}px ${GARDEN_LABEL_PADDING_X}px`,
                     borderRadius: 999,
-                    fontSize: 270,
+                    fontSize: GARDEN_LABEL_FONT_SIZE,
                     color: 'rgba(234, 247, 255, 0.95)',
                     background: 'linear-gradient(115deg, rgba(3, 12, 34, 0.78), rgba(9, 28, 57, 0.72))',
                     border: '1px solid rgba(156, 214, 255, 0.45)',

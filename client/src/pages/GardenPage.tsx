@@ -61,6 +61,30 @@ export default function GardenPage() {
       >
         <GardenScene />
       </Canvas>
+      <div
+        style={{
+          position: 'fixed',
+          left: 14,
+          top: 14,
+          width: 320,
+          maxWidth: '88vw',
+          background: 'rgba(0, 0, 0, 0.72)',
+          border: '1px solid rgba(255, 255, 255, 0.32)',
+          borderRadius: 12,
+          color: '#d8f0ff',
+          padding: '10px 12px',
+          zIndex: 30,
+          fontSize: 12,
+          pointerEvents: 'none',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+          backdropFilter: 'blur(6px)',
+          lineHeight: 1.45,
+        }}
+      >
+        <div style={{ marginBottom: 6, fontWeight: 700 }}>Garden 모니터</div>
+        <div>우주페이지(노트북)에서 SPACE로 심은 단어가 여기서 꽃으로 즉시 나타납니다.</div>
+        <div style={{ marginTop: 4 }}>큰 모니터에서 단어의 생성·성장 과정을 오래 바라보세요.</div>
+      </div>
 
       {showDebug && (
         <div

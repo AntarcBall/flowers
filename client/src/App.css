@@ -48,6 +48,14 @@ body {
   animation: prologue-film 6s linear infinite;
 }
 
+.prologue-screen button {
+  color: #ffd93d !important;
+}
+
+.prologue-screen button:hover {
+  color: #ffe35c !important;
+}
+
 @keyframes prologue-film {
   from {
     transform: translateY(0);
