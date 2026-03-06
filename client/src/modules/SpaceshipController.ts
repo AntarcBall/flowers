@@ -18,8 +18,9 @@ export class SpaceshipController {
     deltaTime: number,
     inputState: Record<string, boolean>,
     _speedScale = 1,
+    wrapDistance = CONFIG.CUBE_SIZE,
   ): boolean {
-    const { MAX_SPEED, ACCEL_ROT, DAMPING_ROT, CUBE_SIZE } = CONFIG;
+    const { MAX_SPEED, ACCEL_ROT, DAMPING_ROT } = CONFIG;
     this.speed = MathUtils.clamp(FIXED_SHIP_SPEED, 0, MAX_SPEED); // deprecated: speed controls are fixed at runtime
 
     if (inputState['w'] || inputState['W']) this.angularVelocity.pitch -= ACCEL_ROT;
@@ -41,9 +42,12 @@ export class SpaceshipController {
     this.position.addScaledVector(forwardVector, effectiveSpeed * deltaTime);
 
     let warped = false;
-    if (Math.abs(this.position.x) > CUBE_SIZE || 
-        Math.abs(this.position.y) > CUBE_SIZE || 
-        Math.abs(this.position.z) > CUBE_SIZE) {
+    if (
+      wrapDistance !== Infinity &&
+      (Math.abs(this.position.x) > wrapDistance ||
+        Math.abs(this.position.y) > wrapDistance ||
+        Math.abs(this.position.z) > wrapDistance)
+    ) {
         this.position.set(0, 0, 0);
         warped = true;
     }

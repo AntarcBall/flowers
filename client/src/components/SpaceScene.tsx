@@ -11,6 +11,7 @@ import {
   Color,
   SphereGeometry,
   MeshBasicMaterial,
+  DoubleSide,
 } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
@@ -146,6 +147,7 @@ const CONE_HEIGHT = 50 * 14;
 const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
 const LABEL_REVEAL_MS = 640;
 const PLANT_HOLD_DURATION_MS = 900;
+const GRID_PLANE_SIZE = 2000;
 
 const LAUNCH_GUIDE_OFFSET = new Vector3(0, 0.05, -1.62);
 
@@ -215,8 +217,10 @@ export const SpaceScene = ({
   const shipScale = Math.max(0.2, Math.min(3, settings.shipScale || 1));
   const launchTrailLimit = Math.max(0, Math.round(settings.launchTrailLimit || 0));
   const useHighQualityShip = (settings.shipQuality || 0) >= 0.5;
-  const showGrid = (settings.gridDensity || 1) >= 0.4;
+  const showGrid = (settings.gridDensity || 1) >= 0.01;
   const gridLines = Math.max(6, Math.round(20 * (settings.gridDensity || 1)));
+  const showGridPlane = (settings.gridDensity || 1) >= 0.01;
+  const gridPlaneOpacity = Math.max(0.04, Math.min(0.2, (settings.gridDensity || 1) * 0.18 + 0.02));
   const labelFontScale = Math.max(0.5, Math.min(30, settings.labelFontScale || 1));
   const labelFontMin = Math.max(1, Math.min(LABEL_FONT_MIN_MAX, Math.round(settings.labelFontMin || 10)));
   const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
@@ -226,7 +230,7 @@ export const SpaceScene = ({
   const debugEnabled = debugMode;
   const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
   const labelRevealStartAtRef = useRef(new Map<number, number>());
-  const labelTickRef = useRef(0);
+  const labelUpdateMsRef = useRef(0);
   const [labelTick, setLabelTick] = useState(0);
   const [launchGuideVisible, setLaunchGuideVisible] = useState(false);
   const plantHoldStartRef = useRef<number | null>(null);
@@ -235,6 +239,11 @@ export const SpaceScene = ({
   const plantHoldCompletedRef = useRef(false);
   const spaceHoldKeyRef = useRef(false);
   const launchGuideTargetRef = useRef<SpaceStar | null>(null);
+  const onAimChangeRef = useRef(onAimChange);
+  const onPlantHoldRef = useRef(onPlantHold);
+  const onPlantHoldEventRef = useRef(onPlantHoldEvent);
+  const canPlantRef = useRef(canPlant);
+  const maxTravelRadiusRef = useRef<number>(Infinity);
   const debugHoldLogAtRef = useRef(0);
   const spaceHoldStateRef = useRef<SpacePlantHoldState>({
     active: false,
@@ -242,6 +251,49 @@ export const SpaceScene = ({
     target: null,
   });
   const aimSampleStep = Math.max(1, Math.min(8, Math.round(settings.aimSampleStep || 1)));
+  onAimChangeRef.current = onAimChange;
+  onPlantHoldRef.current = onPlantHold;
+  onPlantHoldEventRef.current = onPlantHoldEvent;
+  canPlantRef.current = canPlant;
+
+  const resetHoldStateForWarp = () => {
+    const hadHoldState =
+      spaceHoldKeyRef.current ||
+      plantHoldActiveRef.current ||
+      plantHoldCompletedRef.current ||
+      plantHoldStartRef.current !== null ||
+      plantHoldTargetIdRef.current !== null ||
+      launchGuideTargetRef.current !== null ||
+      launchGuideVisible;
+    if (!hadHoldState) {
+      spaceHoldStateRef.current = { active: false, progress: 0, target: null };
+      return;
+    }
+
+    const target = plantHoldTargetIdRef.current !== null ? starsByIdRef.current.get(plantHoldTargetIdRef.current) : null;
+    const cancelPayload = target
+      ? {
+          id: target.id,
+          word: target.word,
+          color: target.color,
+          params: target.params,
+          embedding: target.embedding,
+        }
+      : null;
+    const idle: SpacePlantHoldState = { active: false, progress: 0, target: null };
+
+    spaceHoldKeyRef.current = false;
+    plantHoldActiveRef.current = false;
+    plantHoldCompletedRef.current = false;
+    plantHoldStartRef.current = null;
+    plantHoldTargetIdRef.current = null;
+    launchGuideTargetRef.current = null;
+    spaceHoldStateRef.current = idle;
+    onPlantHoldEventRef.current?.({ type: 'cancel', target: cancelPayload });
+    onPlantHoldRef.current?.(idle);
+    onAimChangeRef.current?.(null);
+    setLaunchGuideVisible(false);
+  };
 
   const toHeadingDeg = (vector: Vector3) => {
     const rawDeg = (Math.atan2(vector.x, vector.z) * 180) / Math.PI;
@@ -329,6 +381,8 @@ export const SpaceScene = ({
             };
           }
         );
+        const maxDist = loadedStars.reduce((result, star) => Math.max(result, star.position.length()), 0);
+        maxTravelRadiusRef.current = maxDist === 0 ? Infinity : maxDist * 1.4;
         setStars(loadedStars);
         if (debugEnabled) {
           console.debug('[SpaceScene] loaded stars', { total: loadedStars.length });
@@ -338,7 +392,11 @@ export const SpaceScene = ({
   }, [debugEnabled]);
 
   useFrame((_, delta) => {
-    controller.update(delta, inputRef.current);
+    const maxTravelRadius = maxTravelRadiusRef.current;
+    const warpedToCenter = controller.update(delta, inputRef.current, 1, maxTravelRadius);
+    if (warpedToCenter) {
+      resetHoldStateForWarp();
+    }
     if (shipRef.current) {
       shipRef.current.position.copy(controller.position);
       shipRef.current.quaternion.copy(controller.quaternion);
@@ -410,12 +468,12 @@ export const SpaceScene = ({
       }
     }
 
-    labelTickRef.current += 1;
-    if (labelTickRef.current >= 4) {
-      if (labelTickRef.current >= 4) {
-        labelTickRef.current = 0;
-        setLabelTick((current) => current + 1);
-      }
+    const updateInterval = Math.max(24, settings.labelUpdateIntervalMs);
+    labelUpdateMsRef.current += delta * 1000;
+    const shouldRefreshLabels = labelUpdateMsRef.current >= updateInterval;
+    if (shouldRefreshLabels) {
+      labelUpdateMsRef.current = 0;
+      setLabelTick((current) => current + 1);
     }
 
     if (labelsEnabled && candidates.length === 0 && nearestId !== null) {
@@ -447,11 +505,9 @@ export const SpaceScene = ({
       }
     }
 
-    if (labelsEnabled) {
-      if (labelsChanged) {
-        setLabelVisibleStarIds(nextVisibleIds);
-      }
-    } else if (labelVisibleStarIds.size !== 0) {
+    if (labelsEnabled && shouldRefreshLabels && labelsChanged) {
+      setLabelVisibleStarIds(nextVisibleIds);
+    } else if (!labelsEnabled && labelVisibleStarIds.size !== 0 && shouldRefreshLabels) {
       setLabelVisibleStarIds(new Set());
     }
 
@@ -500,7 +556,7 @@ export const SpaceScene = ({
             distance: Number.isFinite(bestTargetDist) ? bestTargetDist : undefined,
             headingOffsetDeg,
           };
-          onAimChange(payload);
+          onAimChangeRef.current?.(payload);
         }
       }
       if (plantHoldActiveRef.current && plantHoldTargetIdRef.current !== currentAimedId) {
@@ -509,9 +565,9 @@ export const SpaceScene = ({
         plantHoldStartRef.current = null;
         const empty = null;
         spaceHoldStateRef.current = { active: false, progress: 0, target: empty };
-        if (onPlantHoldEvent) {
+        if (onPlantHoldEventRef.current) {
           const target = starsByIdRef.current.get(plantHoldTargetIdRef.current as number);
-          onPlantHoldEvent({
+          onPlantHoldEventRef.current({
             type: 'cancel',
             target: target
               ? {
@@ -527,12 +583,12 @@ export const SpaceScene = ({
           });
         }
         plantHoldTargetIdRef.current = null;
-        onPlantHold?.(spaceHoldStateRef.current);
+        onPlantHoldRef.current?.(spaceHoldStateRef.current);
         launchGuideTargetRef.current = null;
         setLaunchGuideVisible(false);
       }
     } else if (!currentAimedId) {
-      onAimChange(null);
+      onAimChangeRef.current?.(null);
       if (plantHoldActiveRef.current) {
         plantHoldActiveRef.current = false;
         plantHoldCompletedRef.current = false;
@@ -540,8 +596,8 @@ export const SpaceScene = ({
         plantHoldTargetIdRef.current = null;
         const idle = { active: false, progress: 0, target: null };
         spaceHoldStateRef.current = idle;
-        if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
-        onPlantHold?.(idle);
+        onPlantHoldEventRef.current?.({ type: 'cancel', target: null });
+        onPlantHoldRef.current?.(idle);
         launchGuideTargetRef.current = null;
         setLaunchGuideVisible(false);
       } else {
@@ -550,7 +606,7 @@ export const SpaceScene = ({
     }
 
     const now = nowMs();
-    if (plantHoldActiveRef.current && onPlantHold) {
+    if (plantHoldActiveRef.current && onPlantHoldRef.current) {
       const holdTarget = plantHoldTargetIdRef.current;
       if (holdTarget !== null) {
         const elapsed = now - (plantHoldStartRef.current || now);
@@ -569,19 +625,19 @@ export const SpaceScene = ({
           };
           const nextHoldState: SpacePlantHoldState = { active: true, progress, target: targetPayload };
           spaceHoldStateRef.current = nextHoldState;
-          onPlantHold(nextHoldState);
+          onPlantHoldRef.current?.(nextHoldState);
 
           if (progress >= 1 && !plantHoldCompletedRef.current) {
-            const canPlace = canPlant ? canPlant() : true;
+            const canPlace = canPlantRef.current ? canPlantRef.current() : true;
             if (canPlace) {
               plantHoldCompletedRef.current = true;
               plantHoldActiveRef.current = false;
               plantHoldStartRef.current = null;
               plantHoldTargetIdRef.current = null;
               spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
-              if (onPlantHoldEvent) onPlantHoldEvent({ type: 'complete', target: targetPayload });
+              onPlantHoldEventRef.current?.({ type: 'complete', target: targetPayload });
               selectAimedStar(holdTarget);
-              onPlantHold(spaceHoldStateRef.current);
+              onPlantHoldRef.current?.(spaceHoldStateRef.current);
               launchGuideTargetRef.current = null;
               setLaunchGuideVisible(false);
             } else {
@@ -590,8 +646,8 @@ export const SpaceScene = ({
               plantHoldStartRef.current = null;
               plantHoldTargetIdRef.current = null;
               spaceHoldStateRef.current = { active: false, progress: 0, target: targetPayload };
-              if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
-              onPlantHold(spaceHoldStateRef.current);
+              onPlantHoldEventRef.current?.({ type: 'cancel', target: targetPayload });
+              onPlantHoldRef.current?.(spaceHoldStateRef.current);
               launchGuideTargetRef.current = null;
               setLaunchGuideVisible(false);
             }
@@ -603,8 +659,8 @@ export const SpaceScene = ({
           plantHoldTargetIdRef.current = null;
           const idle = { active: false, progress: 0, target: null };
           spaceHoldStateRef.current = idle;
-          if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: null });
-          onPlantHold(idle);
+          onPlantHoldEventRef.current?.({ type: 'cancel', target: null });
+          onPlantHoldRef.current?.(idle);
           launchGuideTargetRef.current = null;
           setLaunchGuideVisible(false);
         }
@@ -613,7 +669,7 @@ export const SpaceScene = ({
       if (spaceHoldStateRef.current.active !== false || spaceHoldStateRef.current.progress !== 0) {
         const idle = { active: false, progress: 0, target: null };
         spaceHoldStateRef.current = idle;
-        onPlantHold?.(idle);
+        onPlantHoldRef.current?.(idle);
         launchGuideTargetRef.current = null;
         setLaunchGuideVisible(false);
       }
@@ -654,7 +710,8 @@ export const SpaceScene = ({
 
   useEffect(() => {
     const requestPlant = () => {
-      if (canPlant && !canPlant()) {
+      const canPlantNow = canPlantRef.current;
+      if (canPlantNow && !canPlantNow()) {
         setLaunchGuideVisible(false);
         return;
       }
@@ -687,9 +744,9 @@ export const SpaceScene = ({
       const initialState: SpacePlantHoldState = { active: true, progress: 0, target: targetPayload };
       spaceHoldStateRef.current = initialState;
       setLaunchGuideVisible(true);
-      onPlantHold?.(initialState);
-      if (onPlantHoldEvent) onPlantHoldEvent({ type: 'start', target: targetPayload });
-      onAimChange(targetPayload);
+      onPlantHoldRef.current?.(initialState);
+      onPlantHoldEventRef.current?.({ type: 'start', target: targetPayload });
+      onAimChangeRef.current?.(targetPayload);
     };
 
     const releasePlant = () => {
@@ -713,8 +770,8 @@ export const SpaceScene = ({
       plantHoldTargetIdRef.current = null;
       const idle = { active: false, progress: 0, target: null };
       spaceHoldStateRef.current = idle;
-      onPlantHold?.(idle);
-      if (onPlantHoldEvent) onPlantHoldEvent({ type: 'cancel', target: targetPayload });
+      onPlantHoldRef.current?.(idle);
+      onPlantHoldEventRef.current?.({ type: 'cancel', target: targetPayload });
       launchGuideTargetRef.current = null;
       setLaunchGuideVisible(false);
     };
@@ -741,9 +798,8 @@ export const SpaceScene = ({
       window.removeEventListener('keyup', handleKeyUp);
       spaceHoldKeyRef.current = false;
       launchGuideTargetRef.current = null;
-      setLaunchGuideVisible(false);
     };
-  }, [controller, launchTrailLimit, onAimChange, onPlantHold, onPlantHoldEvent, selectAimedStar, canPlant]);
+  }, [controller]);
 
   useFrame((_, delta) => {
     if (launchEffects.length === 0) return;
@@ -1084,7 +1140,22 @@ export const SpaceScene = ({
         );
       })}
 
-      {showGrid && <gridHelper args={[2000, gridLines]} />}
+      {showGrid && <gridHelper args={[GRID_PLANE_SIZE, gridLines]} />}
+      {showGridPlane && (
+        <mesh
+          position={[0, 0, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[GRID_PLANE_SIZE, GRID_PLANE_SIZE]} />
+          <meshStandardMaterial
+            color="#061a30"
+            transparent
+            opacity={gridPlaneOpacity}
+            side={DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
     </>

@@ -129,6 +129,7 @@ export default function SpacePage({
   const [showPerfPanel, setShowPerfPanel] = useState(false);
   const [seedBlocked, setSeedBlocked] = useState(false);
   const plantedCommitGuardRef = useRef<Map<string, number>>(new Map());
+  const toastSequenceRef = useRef(0);
   const PLANT_DUP_WINDOW_MS = 1200;
   const usedSeedsRef = useRef(0);
   const PLANT_LOCK_WINDOW_MS = 900;
@@ -239,7 +240,7 @@ export default function SpacePage({
 
     setUsedSeeds((current) => {
       const next = current + 1;
-      const toastId = `${data.word}-${next}-${nowAtPlant}`;
+      const toastId = `${data.word}-${next}-${nowAtPlant}-${toastSequenceRef.current++}`;
       setToasts((currentToasts) => [...currentToasts, { id: toastId, word: data.word }]);
       const timerId = window.setTimeout(() => {
         setToasts((currentToasts) => currentToasts.filter((entry) => entry.id !== toastId));
@@ -285,6 +286,15 @@ export default function SpacePage({
   const showThrottle = showHud && perf.hudThrottleBar;
   const showPosition = showHud && perf.hudPositionPanel;
   const showCompass = showHud && perf.hudHeadingCompass;
+  const embeddingBars = aimedStarData ? buildEmbeddingBars(aimedStarData.embedding) : [];
+  const hudPanelStyle = {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none' as const,
+    opacity: Math.max(0.35, Math.min(1, perf.hudOpacity)),
+    transform: `scale(${perf.hudScale})`,
+    transformOrigin: '50% 50%',
+  };
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
       <Canvas
@@ -308,11 +318,7 @@ export default function SpacePage({
       </Canvas>
 
       <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-        }}
+        style={hudPanelStyle}
       >
         {seedBlocked && (
           <div
@@ -402,6 +408,50 @@ export default function SpacePage({
               </svg>
             </div>
             <div style={{ fontSize: 12 }}>plant {Math.round(holdState.progress * 100)}%</div>
+          </div>
+        )}
+
+        {showHud && aimedStarData && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: 'calc(50% - 90px)',
+              width: 280,
+              transform: 'translateX(-50%)',
+              pointerEvents: 'none',
+              color: 'white',
+              textAlign: 'center',
+              zIndex: 6,
+            }}
+          >
+            <div style={{ marginBottom: 4, fontSize: 10, color: '#c6e3ff', opacity: 0.92 }}>
+              임베딩 스펙트럼 ({embeddingBars.length}D)
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${Math.max(1, embeddingBars.length)}, minmax(0, 1fr))`,
+                gap: 2,
+                height: 12,
+                alignItems: 'stretch',
+                opacity: 0.95,
+              }}
+            >
+              {embeddingBars.map((segment, segmentIndex) => (
+                <div
+                  key={`${aimedStarData.word}-${segmentIndex}`}
+                  style={{
+                    height: 12,
+                    background: segment.color,
+                    opacity: 0.55 + segment.value * 0.45,
+                    borderRadius: 2,
+                    boxShadow: `inset 0 0 0 1px rgba(255,255,255,${0.18 + segment.value * 0.4})`,
+                  }}
+                  title={`embedding ${segmentIndex + 1}: ${segment.value.toFixed(3)}`}
+                />
+              ))}
+            </div>
           </div>
         )}
 
@@ -514,41 +564,6 @@ export default function SpacePage({
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '5px' }}>
               <FlowerPreview params={aimedStarData.params} color={aimedStarData.color} size={120} />
             </div>
-            <div style={{ padding: '0 5px 6px' }}>
-              {(() => {
-                const bars = buildEmbeddingBars(aimedStarData.embedding);
-                return (
-                  <>
-                    <div style={{ marginBottom: 4, fontSize: 10, color: '#c6e3ff', opacity: 0.9 }}>
-                      임베딩 스펙트럼 ({bars.length}D)
-                    </div>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(${Math.max(1, bars.length)}, minmax(0, 1fr))`,
-                        gap: 2,
-                        height: 12,
-                        alignItems: 'stretch',
-                      }}
-                    >
-                      {bars.map((segment, segmentIndex) => (
-                        <div
-                          key={`${aimedStarData.word}-${segmentIndex}`}
-                          style={{
-                            height: 12,
-                            background: segment.color,
-                            opacity: 0.55 + segment.value * 0.45,
-                            borderRadius: 2,
-                            boxShadow: `inset 0 0 0 1px rgba(255,255,255,${0.18 + segment.value * 0.4})`,
-                          }}
-                          title={`embedding ${segmentIndex + 1}: ${segment.value.toFixed(3)}`}
-                        />
-                      ))}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
             {showRangeReadout && aimedStarData.distance !== undefined && (
               <div style={{ padding: '4px 8px', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.22)' }}>
                 distance: {aimedStarData.distance.toFixed(2)}
@@ -655,9 +670,60 @@ export default function SpacePage({
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
               type="checkbox"
+              checked={perf.hudPositionPanel}
+              onChange={(e) => updatePerf({ hudPositionPanel: e.target.checked })}
+              style={{ marginRight: 6 }}
+              disabled={!showHud}
+            />
+            Position panel
+          </label>
+          <label style={{ display: 'block', marginBottom: 6 }}>
+            <input
+              type="checkbox"
+              checked={perf.hudHeadingCompass}
+              onChange={(e) => updatePerf({ hudHeadingCompass: e.target.checked })}
+              style={{ marginRight: 6 }}
+              disabled={!showHud}
+            />
+            Compass
+          </label>
+          <label style={{ display: 'block', marginBottom: 6 }}>
+            <input
+              type="checkbox"
+              checked={perf.hudTargetPanel}
+              onChange={(e) => updatePerf({ hudTargetPanel: e.target.checked })}
+              style={{ marginRight: 6 }}
+              disabled={!showHud}
+            />
+            Target panel
+          </label>
+          <label style={{ display: 'block', marginBottom: 6 }}>
+            <input
+              type="checkbox"
+              checked={perf.hudThrottleBar}
+              onChange={(e) => updatePerf({ hudThrottleBar: e.target.checked })}
+              style={{ marginRight: 6 }}
+              disabled={!showHud}
+            />
+            Throttle bar
+          </label>
+          <label style={{ display: 'block', marginBottom: 6 }}>
+            <input
+              type="checkbox"
+              checked={perf.hudRangeReadout}
+              onChange={(e) => updatePerf({ hudRangeReadout: e.target.checked })}
+              style={{ marginRight: 6 }}
+              disabled={!showHud}
+            />
+            Range readout
+          </label>
+          <label style={{ display: 'block', marginBottom: 6 }}>
+            <input
+              type="checkbox"
               checked={perf.hudCrosshair}
               onChange={(e) => updatePerf({ hudCrosshair: e.target.checked })}
               style={{ marginRight: 6 }}
+              disabled={!showHud}
             />
             Crosshair
           </label>
@@ -667,6 +733,7 @@ export default function SpacePage({
               checked={perf.hudSpeedometer}
               onChange={(e) => updatePerf({ hudSpeedometer: e.target.checked })}
               style={{ marginRight: 6 }}
+              disabled={!showHud}
             />
             Speedometer
           </label>
@@ -679,6 +746,42 @@ export default function SpacePage({
               step={0.05}
               value={perf.hudScale}
               onChange={(e) => updatePerf({ hudScale: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            HUD opacity ({perf.hudOpacity.toFixed(2)})
+            <input
+              type="range"
+              min={0.35}
+              max={1}
+              step={0.01}
+              value={perf.hudOpacity}
+              onChange={(e) => updatePerf({ hudOpacity: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            DPR min ({perf.dprMin.toFixed(2)})
+            <input
+              type="range"
+              min={0.5}
+              max={perf.dprMax}
+              step={0.1}
+              value={perf.dprMin}
+              onChange={(e) => updatePerf({ dprMin: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            DPR max ({perf.dprMax.toFixed(2)})
+            <input
+              type="range"
+              min={perf.dprMin}
+              max={2}
+              step={0.1}
+              value={perf.dprMax}
+              onChange={(e) => updatePerf({ dprMax: Number(e.target.value) })}
               style={{ width: '100%' }}
             />
           </label>
@@ -700,6 +803,66 @@ export default function SpacePage({
               step={5}
               value={Math.round(perf.backgroundStarDensity * 100)}
               onChange={(e) => updatePerf({ backgroundStarDensity: Number(e.target.value) / 100 })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            Background point size ({perf.backgroundPointSize.toFixed(1)})
+            <input
+              type="range"
+              min={1}
+              max={3.4}
+              step={0.1}
+              value={perf.backgroundPointSize}
+              onChange={(e) => updatePerf({ backgroundPointSize: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            Star geometry segments ({perf.starGeometrySegments})
+            <input
+              type="range"
+              min={4}
+              max={16}
+              step={2}
+              value={perf.starGeometrySegments}
+              onChange={(e) => updatePerf({ starGeometrySegments: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            Max visible labels ({perf.maxVisibleLabels})
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={1}
+              value={perf.maxVisibleLabels}
+              onChange={(e) => updatePerf({ maxVisibleLabels: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            Label update interval ({perf.labelUpdateIntervalMs}ms)
+            <input
+              type="range"
+              min={24}
+              max={220}
+              step={1}
+              value={perf.labelUpdateIntervalMs}
+              onChange={(e) => updatePerf({ labelUpdateIntervalMs: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            Label cone scale ({perf.labelConeScale.toFixed(2)})
+            <input
+              type="range"
+              min={0.55}
+              max={1.35}
+              step={0.01}
+              value={perf.labelConeScale}
+              onChange={(e) => updatePerf({ labelConeScale: Number(e.target.value) })}
               style={{ width: '100%' }}
             />
           </label>
@@ -751,6 +914,30 @@ export default function SpacePage({
               style={{ width: '100%' }}
             />
           </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            ship quality ({perf.shipQuality.toFixed(2)})
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={perf.shipQuality}
+              onChange={(e) => updatePerf({ shipQuality: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            Grid density ({perf.gridDensity.toFixed(2)})
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={perf.gridDensity}
+              onChange={(e) => updatePerf({ gridDensity: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button
               onClick={() => setPerf(DEFAULT_SPACE_PERFORMANCE_SETTINGS)}
@@ -763,12 +950,21 @@ export default function SpacePage({
                 updatePerf({
                   dprMin: 0.7,
                   dprMax: 1.1,
+                  hudScale: 1,
+                  hudOpacity: 0.95,
+                  hudPositionPanel: true,
+                  hudHeadingCompass: true,
+                  hudTargetPanel: true,
+                  hudThrottleBar: true,
+                  hudRangeReadout: true,
                   backgroundStarDensity: 0.35,
                   backgroundPointSize: 1.2,
                   starGeometrySegments: 4,
                   maxVisibleLabels: 4,
+                  labelUpdateIntervalMs: 120,
                   labelFontScale: 1,
                   labelFontMin: 10,
+                  labelConeScale: 0.82,
                   shipScale: 1,
                   launchTrailLimit: 2,
                   shipQuality: 0,
