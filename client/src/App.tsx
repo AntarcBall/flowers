@@ -269,12 +269,12 @@ export default function App() {
   ) : null;
 
   const controlGuide = showControlGuide ? (
-      <div
-        style={{
-          position: 'absolute',
-          top: 20,
-          right: 20,
-          color: '#eaf6ff',
+    <div
+      style={{
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        color: '#eaf6ff',
         fontSize: 13,
         lineHeight: 1.6,
         pointerEvents: 'none',
@@ -286,14 +286,11 @@ export default function App() {
         maxWidth: 280,
       }}
     >
-      <div>
-            남은 심기: {seedState.remaining} / {seedState.total}
-          </div>
-          <div style={{ marginTop: 4 }}>조작: W/A/S/D + Space(0.9초 홀드)</div>
-          <div style={{ marginTop: 2 }}>Garden(큰 모니터)에 심기 상태가 즉시 갱신됩니다.</div>
-          </div>
-        </div>
-      ) : null;
+      <div>남은 심기: {seedState.remaining} / {seedState.total}</div>
+      <div style={{ marginTop: 4 }}>조작: W/A/S/D + Space(0.9초 홀드)</div>
+      <div style={{ marginTop: 2 }}>Garden(큰 모니터)에 심기 상태가 즉시 갱신됩니다.</div>
+    </div>
+  ) : null;
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: 'black' }}>
