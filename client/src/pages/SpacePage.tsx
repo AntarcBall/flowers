@@ -49,6 +49,9 @@ type SpacePageProps = {
 
 const formatCoord = (value: number) => value.toFixed(2);
 const FIXED_START_SPEED = 12;
+const FLOWER_RETENTION_HOURS = 8;
+const FLOWER_RETENTION_MS = FLOWER_RETENTION_HOURS * 60 * 60 * 1000;
+const FLOWER_SCREEN_CAPACITY_FOR_RETENTION = 15;
 const normalizeSeedLimit = (value?: number) => {
   if (!Number.isFinite(value as number) || (value as number) <= 0) {
     return 3;
@@ -78,6 +81,17 @@ const makeRandomPosition = () => ({
   x: Math.random() * CONFIG.GARDEN_WIDTH,
   y: Math.random() * CONFIG.GARDEN_HEIGHT,
 });
+
+const resolvePlantedAt = (flower: FlowerData, fallback: number) => {
+  const plantedAt = Number(flower.plantedAt);
+  if (Number.isFinite(plantedAt) && plantedAt > 0) return plantedAt;
+  return Number.isFinite(flower.timestamp) ? flower.timestamp : fallback;
+};
+
+const removeAgedFlowersWhenOverCapacity = (flowers: FlowerData[], now: number) => {
+  if (flowers.length < FLOWER_SCREEN_CAPACITY_FOR_RETENTION) return flowers;
+  return flowers.filter((flower) => now - resolvePlantedAt(flower, now) < FLOWER_RETENTION_MS);
+};
 const makeFlowerId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? (crypto as Crypto).randomUUID()
@@ -216,8 +230,9 @@ export default function SpacePage({
       witheringMs: Math.round(CONFIG.FLOWER_WITHERING_MS * (0.6 + 0.8 * Math.random())),
     };
 
-    existing.push(newFlower);
-    PersistenceService.save(existing);
+    const merged = [...existing, newFlower];
+    const nextFlowers = removeAgedFlowersWhenOverCapacity(merged, nowAtPlant);
+    PersistenceService.save(nextFlowers);
     sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
     globalPlantLockUntilRef.current = now + PLANT_LOCK_WINDOW_MS;
     usedSeedsRef.current = usedSeedsRef.current + 1;

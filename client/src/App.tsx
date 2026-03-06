@@ -18,17 +18,25 @@ const CONTROL_GUIDE_DURATION_MS = 7_500;
 
 const PROLOGUE_SHORT = [
   '서가의 그늘에서, 우주는 시작된다.',
-  '단어는 서로를 끌어당겨 성운이 된다.',
+  '단어를 조준해 심으면 Garden 창에 꽃으로 피어납니다.',
+  'WASD로 방향을 바꾸고, Space를 오래 눌러 심어보세요.',
   '오늘은 3개의 꽃만 심을 수 있습니다.',
 ] as const;
 
 const PROLOGUE_FULL = [
   '서가의 그늘에서, 우주는 시작된다.',
-  '단어는 기호가 아니라 서로를 끌어당기는 별이다.',
-  '당신은 잠재 공간을 유영하며 이름을 건져 올린다.',
-  '속도가 아니라 주의를 따라 항해하세요.',
-  '조준 후 SPACE를 눌러 이름이 안착되게 하세요.',
-  '이 항해에서 심을 수 있는 단어는 3개입니다.',
+  '이 전시는 "단어 임베딩 우주"입니다.',
+  '각 단어는 벡터 공간의 좌표를 받아 별 하나로 배치되어 있으며,',
+  '의미가 닮은 단어일수록 서로 가까운 궤도로 보입니다.',
+  'W / A / S / D로 비행기체 자세를 바꿉니다.',
+  'W: 위쪽을 향해 기울임, S: 아래쪽을 향해 기울임',
+  'A: 왼쪽 회전, D: 오른쪽 회전',
+  '우주선은 앞으로 자동 항속합니다. 좌표계를 찾아다니지 말고, "조준점"을 맞추는 데 집중하세요.',
+  'SPACE를 누른 채를 유지하면 조준한 단어가 심어집니다.',
+  '심기는 홀드 0.9초 이상이 필요합니다. 중간에 뗄 경우에는 취소됩니다.',
+  '심긴 단어는 Garden 창(큰 모니터)에 실시간으로 꽃으로 변환되어 남습니다.',
+  '시드를 다 쓰면 항해가 자동으로 종료됩니다. 기본 심기 수는 3개(주소 ?seeds=숫자 로 조정).',
+  '실제 조작은 키보드만으로 진행됩니다. 화면을 클릭하지 않아도 됩니다.',
 ] as const;
 
 const TRIGGERS = {
@@ -261,12 +269,12 @@ export default function App() {
   ) : null;
 
   const controlGuide = showControlGuide ? (
-    <div
-      style={{
-        position: 'absolute',
-        top: 20,
-        right: 20,
-        color: '#eaf6ff',
+      <div
+        style={{
+          position: 'absolute',
+          top: 20,
+          right: 20,
+          color: '#eaf6ff',
         fontSize: 13,
         lineHeight: 1.6,
         pointerEvents: 'none',
@@ -279,10 +287,13 @@ export default function App() {
       }}
     >
       <div>
-        남은 심기: {seedState.remaining} / {seedState.total}
-      </div>
-    </div>
-  ) : null;
+            남은 심기: {seedState.remaining} / {seedState.total}
+          </div>
+          <div style={{ marginTop: 4 }}>조작: W/A/S/D + Space(0.9초 홀드)</div>
+          <div style={{ marginTop: 2 }}>Garden(큰 모니터)에 심기 상태가 즉시 갱신됩니다.</div>
+          </div>
+        </div>
+      ) : null;
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: 'black' }}>
@@ -334,17 +345,21 @@ export default function App() {
               fontSize: 14,
             }}
           >
-            <div>WASD/마우스: 항해 조작</div>
-            <div>조준 + Space: 심기</div>
+            <div>조작(키보드만): W/A/S/D = 방향 변경</div>
+            <div>현재 조준된 단어에서 Space 0.9초 홀드 = 심기</div>
+            <div>심은 단어는 Garden 창에서 꽃으로 확인 가능</div>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-            <button onClick={startFlight} style={{ minWidth: 140, fontWeight: 700 }}>
+            <button onClick={startFlight} style={{ minWidth: 140, fontWeight: 700, color: '#ffd93d' }}>
               우주선 발진
             </button>
-            <button onClick={() => setReadMode((prev) => (prev === 'short' ? 'full' : 'short'))}>
+            <button
+              onClick={() => setReadMode((prev) => (prev === 'short' ? 'full' : 'short'))}
+              style={{ color: '#ffd93d' }}
+            >
               짧게 읽기 / 전체 읽기
             </button>
-          </div>
+            </div>
           <div style={{ opacity: 0.7, fontSize: 12, marginTop: 4 }}>심기 가능 수: {clamp(seedLimit, 1, 10)}</div>
         </div>
       )}

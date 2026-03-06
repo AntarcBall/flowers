@@ -2,6 +2,9 @@ import { CONFIG } from '../config';
 import { normalizeFlowerParams } from './FlowerShape';
 import type { FlowerRenderParams } from '../types';
 
+const FLOWER_SCALE_MIN = 1;
+const FLOWER_SCALE_MAX = 2.1;
+
 export interface FlowerData {
   id: string;
   x: number;
@@ -13,6 +16,7 @@ export interface FlowerData {
   plantedAt?: number;
   lifeSpanMs?: number;
   witheringMs?: number;
+  scaleFactor?: number;
   labelOffsetX?: number;
   labelOffsetY?: number;
   labelRadius?: number;
@@ -29,6 +33,7 @@ type RawFlowerLike = Partial<FlowerData> & {
   word?: unknown;
   lifeSpanMs?: unknown;
   witheringMs?: unknown;
+  scaleFactor?: unknown;
   labelOffsetX?: unknown;
   labelOffsetY?: unknown;
   labelRadius?: unknown;
@@ -78,6 +83,7 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
   const now = Date.now();
   const baseTimestamp = Number(anyRaw.timestamp);
   const plantedAt = Number(anyRaw.plantedAt);
+  const scaleFactor = Number(anyRaw.scaleFactor);
   const labelOffsetX = Number(anyRaw.labelOffsetX);
   const labelOffsetY = Number(anyRaw.labelOffsetY);
   const labelRadius = Number(anyRaw.labelRadius);
@@ -102,10 +108,15 @@ function sanitizeFlower(raw: unknown, index: number): FlowerData | null {
     labelOffsetX: Number.isFinite(labelOffsetX) ? labelOffsetX : undefined,
     labelOffsetY: Number.isFinite(labelOffsetY) ? labelOffsetY : undefined,
     labelRadius: Number.isFinite(labelRadius) ? labelRadius : undefined,
+    scaleFactor: Number.isFinite(scaleFactor)
+      ? Math.max(FLOWER_SCALE_MIN, Math.min(FLOWER_SCALE_MAX, scaleFactor))
+      : undefined,
   };
 }
 
 export class PersistenceService {
+  static readonly STORAGE_UPDATED_EVENT = 'flower:storage-updated';
+
   static load(): FlowerData[] {
     try {
       const data = localStorage.getItem(CONFIG.STORAGE_KEY);
@@ -127,6 +138,9 @@ export class PersistenceService {
     try {
       const json = JSON.stringify(flowers);
       localStorage.setItem(CONFIG.STORAGE_KEY, json);
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event(PersistenceService.STORAGE_UPDATED_EVENT));
+      }
     } catch (e) {
       console.error('Failed to save garden', e);
     }
