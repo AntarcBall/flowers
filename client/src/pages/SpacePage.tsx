@@ -149,6 +149,22 @@ export default function SpacePage({
     saveSpacePerformanceSettings(perf);
   }, [perf]);
 
+  useEffect(() => {
+    const handleHiddenPerfToggle = (event: KeyboardEvent) => {
+      if (event.repeat || !event.altKey || event.code !== 'KeyQ') {
+        return;
+      }
+
+      event.preventDefault();
+      setShowPerfPanel((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', handleHiddenPerfToggle);
+    return () => {
+      window.removeEventListener('keydown', handleHiddenPerfToggle);
+    };
+  }, []);
+
   const canPlantCurrent = canPlant ?? (() => seedState.remaining > 0);
 
   const showSeedBlock = () => {
@@ -540,28 +556,6 @@ export default function SpacePage({
         )}
 
       </div>
-
-      <button
-        onClick={() => setShowPerfPanel((prev) => !prev)}
-        style={{
-          position: 'fixed',
-          left: 14,
-          bottom: 14,
-          width: 46,
-          height: 46,
-          borderRadius: 16,
-          border: '1px solid rgba(255,255,255,0.45)',
-          background: 'rgba(0,0,0,0.32)',
-          color: 'white',
-          backdropFilter: 'blur(6px)',
-          zIndex: 30,
-          cursor: 'pointer',
-          pointerEvents: 'auto',
-        }}
-      >
-        OPT
-      </button>
-
       {showPerfPanel && (
         <div
           style={{

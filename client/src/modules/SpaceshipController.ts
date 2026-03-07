@@ -17,11 +17,11 @@ export class SpaceshipController {
   update(
     deltaTime: number,
     inputState: Record<string, boolean>,
-    _speedScale = 1,
+    speedScale = 1,
     wrapDistance = CONFIG.CUBE_SIZE,
   ): boolean {
     const { MAX_SPEED, ACCEL_ROT, DAMPING_ROT } = CONFIG;
-    this.speed = MathUtils.clamp(FIXED_SHIP_SPEED, 0, MAX_SPEED); // deprecated: speed controls are fixed at runtime
+    this.speed = MathUtils.clamp(FIXED_SHIP_SPEED * speedScale, 0, MAX_SPEED);
 
     if (inputState['w'] || inputState['W']) this.angularVelocity.pitch -= ACCEL_ROT;
     if (inputState['s'] || inputState['S']) this.angularVelocity.pitch += ACCEL_ROT;
@@ -38,8 +38,7 @@ export class SpaceshipController {
     this.quaternion.multiply(this.pitchQuaternion);
 
     const forwardVector = this.getForwardVector();
-    const effectiveSpeed = this.speed;
-    this.position.addScaledVector(forwardVector, effectiveSpeed * deltaTime);
+    this.position.addScaledVector(forwardVector, this.speed * deltaTime);
 
     let warped = false;
     if (

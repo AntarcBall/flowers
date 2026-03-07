@@ -254,16 +254,21 @@ export class GardenManager {
   }
 
   private resolveFlowerPlacement(x: number, y: number, placed: FlowerData[], scaleFactor: number) {
-    if (placed.length === 0) {
-      return { x, y };
-    }
-
     const startAngle = this.toLabelPlacementSeed(x, y);
     const visualRadius = this.resolveFlowerVisualRadius(scaleFactor);
     const maxX = CONFIG.GARDEN_WIDTH - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN;
     const maxY = CONFIG.GARDEN_HEIGHT - LABEL_EDGE_GUARD - FLOWER_SPAWN_MARGIN;
     const minX = LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN;
     const minY = LABEL_EDGE_GUARD + FLOWER_SPAWN_MARGIN;
+    const clampedX = this.clamp(x, minX, maxX);
+    const clampedY = this.clamp(y, minY, maxY);
+
+    if (
+      this.isInsideGarden(clampedX, clampedY, visualRadius, CONFIG.GARDEN_WIDTH, CONFIG.GARDEN_HEIGHT) &&
+      this.canPlaceFlower(clampedX, clampedY, placed, scaleFactor)
+    ) {
+      return { x: clampedX, y: clampedY };
+    }
 
     for (const ringFactor of FLOWER_RING_FACTORS) {
       const radius = visualRadius * ringFactor;
@@ -293,8 +298,8 @@ export class GardenManager {
     }
 
     return {
-      x: this.clamp(x, minX, maxX),
-      y: this.clamp(y, minY, maxY),
+      x: clampedX,
+      y: clampedY,
     };
   }
 
@@ -347,6 +352,8 @@ export class GardenManager {
     labelRadius: number,
     placed: FlowerData[],
     scaleFactor: number,
+    preferredOffsetX?: number,
+    preferredOffsetY?: number,
   ) {
     const startAngle = this.toLabelPlacementSeed(x, y);
     const fixedRadius =
@@ -355,6 +362,24 @@ export class GardenManager {
         LABEL_FLAT_GAP +
         LABEL_TEXT_PADDING) *
       LABEL_ORBIT_SCALE;
+
+    if (preferredOffsetX !== undefined && preferredOffsetY !== undefined) {
+      const preferredX = x + preferredOffsetX;
+      const preferredY = y + preferredOffsetY;
+      if (
+        this.isInsideGarden(
+          preferredX,
+          preferredY,
+          labelRadius + LABEL_EDGE_GUARD,
+          CONFIG.GARDEN_WIDTH,
+          CONFIG.GARDEN_HEIGHT,
+        ) &&
+        this.canPlaceLabel(preferredX, preferredY, labelRadius, placed)
+      ) {
+        return { offsetX: preferredOffsetX, offsetY: preferredOffsetY };
+      }
+    }
+
     const candidates = [];
 
     for (let i = 0; i < LABEL_TRIES_PER_RING; i += 1) {
@@ -457,6 +482,8 @@ export class GardenManager {
         labelRadius,
         normalized,
         resolvedScale,
+        flower.labelOffsetX,
+        flower.labelOffsetY,
       );
 
       normalized.push({

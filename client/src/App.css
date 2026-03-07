@@ -29,6 +29,22 @@ body {
   overflow: hidden;
 }
 
+.prologue-launch-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.68)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.8));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1s cubic-bezier(0.2, 0.7, 0.2, 1);
+  z-index: 3;
+}
+
+.prologue-screen.prologue-launching .prologue-launch-overlay {
+  opacity: 1;
+}
+
 .prologue-screen::after {
   content: '';
   position: absolute;
@@ -48,12 +64,66 @@ body {
   animation: prologue-film 6s linear infinite;
 }
 
-.prologue-screen button {
-  color: #ffd93d !important;
+.prologue-screen > *:not(.prologue-launch-overlay) {
+  position: relative;
+  z-index: 1;
 }
 
-.prologue-screen button:hover {
-  color: #ffe35c !important;
+.prologue-kbd-stage {
+  width: min(720px, 100%);
+  display: flex;
+  justify-content: center;
+}
+
+.prologue-kbd-panel {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  padding: 24px 28px 26px;
+  border-radius: 28px;
+  border: 1px solid rgba(204, 232, 255, 0.2);
+  background: linear-gradient(180deg, rgba(7, 15, 31, 0.7), rgba(4, 8, 18, 0.88));
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.prologue-wasd-svg {
+  width: min(264px, 56vw);
+  height: auto;
+  overflow: visible;
+}
+
+.prologue-kbd-copy {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  max-width: 520px;
+}
+
+.prologue-kbd-title {
+  color: rgba(255, 226, 138, 0.96);
+  font-size: 0.82rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.prologue-kbd-status {
+  font-size: 1rem;
+  line-height: 1.55;
+  color: rgba(241, 248, 255, 0.94);
+}
+
+.prologue-kbd-meta {
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: rgba(215, 232, 248, 0.8);
+}
+
+.prologue-seed-note {
+  opacity: 0.74;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 @keyframes prologue-film {

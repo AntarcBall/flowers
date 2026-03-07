@@ -444,7 +444,8 @@ export const SpaceScene = ({
 
   useFrame((_, delta) => {
     const maxTravelRadius = maxTravelRadiusRef.current;
-    const warpedToCenter = controller.update(delta, inputRef.current, 1, maxTravelRadius);
+    const speedScale = spaceHoldKeyRef.current ? 0.5 : 1;
+    const warpedToCenter = controller.update(delta, inputRef.current, speedScale, maxTravelRadius);
     if (warpedToCenter) {
       resetHoldStateForWarp();
     }
