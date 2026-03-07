@@ -12,6 +12,7 @@ function normalizeWord(word) {
 
 const DEFAULT_WORDS_FILE = "data/korean_words.txt";
 const DEFAULT_EMBEDDING_PATH = "data/cc.ko.300.vec";
+const SPACE_POSITION_MULTIPLIER = 2;
 
 function resolveInputPath(input) {
   if (!input) {
@@ -404,7 +405,7 @@ async function main() {
   }
 
   console.log(`[3/4] vectors found: ${foundWords.length}/${targetWords.length}`);
-  console.log(`umap config: metric=${opts.metric}, l2Normalize=${opts.l2Normalize}, nNeighbors=${opts.nNeighbors}, minDist=${opts.minDist}, spread=${opts.spread}, scale=${opts.scale}`);
+  console.log(`umap config: metric=${opts.metric}, l2Normalize=${opts.l2Normalize}, nNeighbors=${opts.nNeighbors}, minDist=${opts.minDist}, spread=${opts.spread}, scale=${opts.scale}, positionMultiplier=${SPACE_POSITION_MULTIPLIER}`);
   if (missingWords.length > 0) {
     console.log(`missing words (${missingWords.length}): ${missingWords.join(", ")}`);
   }
@@ -421,9 +422,9 @@ async function main() {
     return {
       id: idx + 1,
       word,
-      x: round6(nx * opts.scale),
-      y: round6(ny * opts.scale),
-      z: round6(nz * opts.scale),
+      x: round6(nx * opts.scale * SPACE_POSITION_MULTIPLIER),
+      y: round6(ny * opts.scale * SPACE_POSITION_MULTIPLIER),
+      z: round6(nz * opts.scale * SPACE_POSITION_MULTIPLIER),
       nx: round6(nx),
       ny: round6(ny),
       nz: round6(nz),

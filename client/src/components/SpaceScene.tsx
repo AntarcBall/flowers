@@ -20,8 +20,10 @@ import {
   DEFAULT_SPACE_PERFORMANCE_SETTINGS,
   type SpacePerformanceSettings,
   LABEL_FONT_MIN_MAX,
+  TARGET_PANEL_MIN_MAX,
 } from '../modules/PerformanceSettings';
 import { CONFIG } from '../config';
+import { ensureColorPresetLoaded, subscribeToColorPreset } from '../modules/ColorPresetStore';
 
 type Telemetry = {
   speed: number;
@@ -239,6 +241,10 @@ export const SpaceScene = ({
   const gridPlaneOpacity = Math.max(0.04, Math.min(0.2, (settings.gridDensity || 1) * 0.18 + 0.02));
   const labelFontScale = Math.max(0.5, Math.min(30, settings.labelFontScale || 1));
   const labelFontMin = Math.max(1, Math.min(LABEL_FONT_MIN_MAX, Math.round(settings.labelFontMin || 10)));
+  const targetPanelMinSize = Math.max(
+    1,
+    Math.min(TARGET_PANEL_MIN_MAX, Math.round(settings.targetPanelMinSize || 176)),
+  );
   const baseLabelFontSize = Math.max(14, Math.round(14 + (labelConeScale - 0.55) * 18));
   const labelFontSize = Math.max(labelFontMin, Math.round(baseLabelFontSize * labelFontScale));
   const labelOffsetX = clamp(settings.labelOffsetX || 0, -1000, 100);
@@ -334,6 +340,7 @@ export const SpaceScene = ({
   const [labelVisibleStarIds, setLabelVisibleStarIds] = useState<Set<number>>(new Set());
   const [launchEffects, setLaunchEffects] = useState<LaunchEffect[]>([]);
   const [stars, setStars] = useState<SpaceStar[]>([]);
+  const [presetTick, setPresetTick] = useState(-1);
   const starsRef = useRef<SpaceStar[]>([]);
   const starsByIdRef = useRef<Map<number, SpaceStar>>(new Map());
   const starGeometry = useMemo(
@@ -379,10 +386,34 @@ export const SpaceScene = ({
   }, [stars]);
 
   useEffect(() => {
+    let active = true;
+    ensureColorPresetLoaded().then(() => {
+      if (!active) return;
+      setPresetTick((current) => current + 1);
+    });
+
+    const unsubscribe = subscribeToColorPreset(() => {
+      if (!active) return;
+      setPresetTick((current) => current + 1);
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (presetTick < 0) {
+      return;
+    }
+
+    let active = true;
     const starsUrl = `${import.meta.env.BASE_URL ?? '/'}stars.json`;
     fetch(starsUrl)
       .then((res) => res.json())
       .then((data) => {
+        if (!active) return;
         const loadedStars = data.map(
           (s: { id: number; word: string; color: string; x: number; y: number; z: number }) => {
             const params = SemanticMapper.mapCoordinatesToParams(s.x, s.y, s.z);
@@ -405,7 +436,11 @@ export const SpaceScene = ({
         }
       })
       .catch((err) => console.error('Failed to load stars:', err));
-  }, [debugEnabled]);
+
+    return () => {
+      active = false;
+    };
+  }, [debugEnabled, presetTick]);
 
   useFrame((_, delta) => {
     const maxTravelRadius = maxTravelRadiusRef.current;
@@ -958,6 +993,19 @@ export const SpaceScene = ({
 
   const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
   const aimedEmbeddingBars = aimedStar ? buildEmbeddingBars(aimedStar.embedding) : [];
+  const aimedStarDist = aimedStar ? aimedStar.position.distanceTo(controller.position) : null;
+  const targetPanelLodStart = Math.max(1, CONFIG.TEXT_LOD_DISTANCE);
+  const targetPanelLodEnd = Math.max(targetPanelLodStart + 160, labelConeLength * 0.94);
+  const targetPanelBaseLod = aimedStarDist === null
+    ? 1
+    : 1 - clamp01((aimedStarDist - targetPanelLodStart) / (targetPanelLodEnd - targetPanelLodStart));
+  const targetPanelSize = Math.max(
+    targetPanelMinSize,
+    Math.round(176 * (0.4 + 0.6 * Math.pow(clamp01(targetPanelBaseLod), 0.55))),
+  );
+  const targetPanelPadding = Math.max(8, Math.round(targetPanelSize * 0.0568));
+  const targetPanelBarHeight = aimedEmbeddingBars.length > 0 ? Math.max(12, Math.round(targetPanelSize * 0.0795)) : 0;
+  const targetPreviewSize = Math.max(56, targetPanelSize - targetPanelPadding * 2);
   const launchGuideStart = shipRef.current
     ? shipRef.current.localToWorld(LAUNCH_GUIDE_OFFSET.clone())
     : controller.position.clone();
@@ -1149,14 +1197,14 @@ export const SpaceScene = ({
                 position: 'absolute',
                 right: 26,
                 bottom: 24,
-                width: 176,
-                height: 176,
-                padding: 10,
+                width: targetPanelSize,
+                height: targetPanelSize,
+                padding: targetPanelPadding,
                 boxSizing: 'border-box',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: 14,
+                borderRadius: Math.max(12, Math.round(targetPanelSize * 0.0795)),
                 border: '1px solid rgba(145, 223, 255, 0.42)',
                 background: 'rgba(5, 16, 26, 0.92)',
                 boxShadow: '0 12px 28px rgba(0, 0, 0, 0.42), 0 0 18px rgba(109, 206, 255, 0.14)',
@@ -1173,12 +1221,12 @@ export const SpaceScene = ({
                     left: 0,
                     top: 0,
                     right: 0,
-                    height: 14,
+                    height: targetPanelBarHeight,
                     display: 'grid',
                     gridTemplateColumns: `repeat(${Math.max(1, aimedEmbeddingBars.length)}, minmax(0, 1fr))`,
                     gap: 0,
                     overflow: 'hidden',
-                    borderRadius: '14px 14px 0 0',
+                    borderRadius: `${Math.max(12, Math.round(targetPanelSize * 0.0795))}px ${Math.max(12, Math.round(targetPanelSize * 0.0795))}px 0 0`,
                   }}
                 >
                   {aimedEmbeddingBars.map((segment, segmentIndex) => (
@@ -1201,11 +1249,11 @@ export const SpaceScene = ({
                   alignItems: 'center',
                   width: '100%',
                   height: '100%',
-                  paddingTop: aimedEmbeddingBars.length > 0 ? 14 : 0,
+                  paddingTop: targetPanelBarHeight,
                   boxSizing: 'border-box',
                 }}
               >
-                <FlowerPreview params={aimedStar.params} color={aimedStar.color} size={156} />
+                <FlowerPreview params={aimedStar.params} color={aimedStar.color} size={targetPreviewSize} />
               </div>
             </div>
           </div>

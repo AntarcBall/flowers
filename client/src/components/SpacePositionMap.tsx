@@ -6,20 +6,50 @@ type SpacePositionLike = {
   z: number;
 };
 
+export type SpacePositionMapPoint = {
+  id: number | string;
+  x: number;
+  y: number;
+  z: number;
+  color: string;
+  size?: number;
+  opacity?: number;
+  normalized?: boolean;
+  emphasis?: boolean;
+  kind?: 'star' | 'anchor';
+};
+
 type SpacePositionMapProps = {
   position: SpacePositionLike;
   velocity?: SpacePositionLike;
   size?: number;
   title?: string;
+  viewMode?: 'tracking' | 'omniscient';
+  zoom?: number;
+  rotation?: Partial<SpacePositionMapRotation>;
+  showShip?: boolean;
+  showSpawn?: boolean;
+  starPoints?: SpacePositionMapPoint[];
+  anchorPoints?: SpacePositionMapPoint[];
 };
 
 type Point3D = { x: number; y: number; z: number };
 type Point2D = { x: number; y: number };
+export type SpacePositionMapRotation = {
+  yaw: number;
+  pitch: number;
+  roll: number;
+};
 
 const SPAWN_POINT = { x: 0, y: 0, z: 0 };
 const CUBE_HALF = 1;
 const TRACKING_SPAN_TARGET = 1200;
 const MIN_MAP_SPAN = 220;
+const DEFAULT_MAP_ROTATION: SpacePositionMapRotation = {
+  yaw: -0.86,
+  pitch: -0.64,
+  roll: -0.28,
+};
 
 const CUBE_VERTICES: Point3D[] = [
   { x: -CUBE_HALF, y: -CUBE_HALF, z: -CUBE_HALF },
@@ -81,10 +111,10 @@ function rotateAroundZ(point: Point3D, angle: number): Point3D {
   };
 }
 
-function rotateCubeForMap(point: Point3D): Point3D {
-  const y = rotateAroundY(point, -0.86);
-  const x = rotateAroundX(y, -0.64);
-  return rotateAroundZ(x, -0.28);
+function rotateCubeForMap(point: Point3D, rotation: SpacePositionMapRotation): Point3D {
+  const y = rotateAroundY(point, rotation.yaw);
+  const x = rotateAroundX(y, rotation.pitch);
+  return rotateAroundZ(x, rotation.roll);
 }
 
 function toOrthographicProjection(point: Point3D, cx: number, cy: number, scale: number): Point2D {
@@ -109,40 +139,60 @@ export function SpacePositionMap({
   position,
   velocity = { x: 0, y: 0, z: 0 },
   size = 190,
+  viewMode = 'tracking',
+  zoom = 1,
+  rotation,
+  showShip,
+  showSpawn,
+  starPoints = [],
+  anchorPoints = [],
 }: SpacePositionMapProps) {
+  const isOmniscient = viewMode === 'omniscient';
+  const resolvedZoom = clamp(zoom, 0.5, 8);
+  const resolvedRotation: SpacePositionMapRotation = {
+    ...DEFAULT_MAP_ROTATION,
+    ...rotation,
+  };
   const cx = size / 2;
   const cy = size / 2 + MAP_Y_LIFT;
   const margin = size * 0.09;
-  const mapSpan = Math.max(
-    TRACKING_SPAN_TARGET,
-    MIN_MAP_SPAN,
-    Math.abs(position.x - SPAWN_POINT.x),
-    Math.abs(position.y - SPAWN_POINT.y),
-    Math.abs(position.z - SPAWN_POINT.z),
-  );
+  const mapSpan = isOmniscient
+    ? CONFIG.CUBE_SIZE
+    : Math.max(
+      TRACKING_SPAN_TARGET,
+      MIN_MAP_SPAN,
+      Math.abs(position.x - SPAWN_POINT.x),
+      Math.abs(position.y - SPAWN_POINT.y),
+      Math.abs(position.z - SPAWN_POINT.z),
+    );
 
   const worldToCube = {
     x: clamp((position.x - SPAWN_POINT.x) / mapSpan, -1, 1),
     y: clamp((position.y - SPAWN_POINT.y) / mapSpan, -1, 1),
     z: clamp((position.z - SPAWN_POINT.z) / mapSpan, -1, 1),
   };
-  const amplifiedWorldToCube = {
-    x: clamp(worldToCube.x * SHIP_TRACK_GAIN, -1, 1),
-    y: clamp(worldToCube.y * SHIP_TRACK_GAIN, -1, 1),
-    z: clamp(worldToCube.z * SHIP_TRACK_GAIN, -1, 1),
-  };
+  const amplifiedWorldToCube = isOmniscient
+    ? worldToCube
+    : {
+      x: clamp(worldToCube.x * SHIP_TRACK_GAIN, -1, 1),
+      y: clamp(worldToCube.y * SHIP_TRACK_GAIN, -1, 1),
+      z: clamp(worldToCube.z * SHIP_TRACK_GAIN, -1, 1),
+    };
 
-  const cubeScale = (size - margin * 2) * 0.27;
+  const cubeScale = (size - margin * 2) * 0.27 * resolvedZoom;
   const toModel = (point: Point3D) => ({
     x: point.x * cubeScale,
     y: point.y * cubeScale,
     z: point.z * cubeScale,
   });
-  const relativeDrift = {
-    x: -worldToCube.x * CUBE_HALF * CUBE_RELATIVE_DRIFT,
-    y: -worldToCube.y * CUBE_HALF * CUBE_RELATIVE_DRIFT,
-    z: -worldToCube.z * CUBE_HALF * CUBE_RELATIVE_DRIFT,
-  };
+  const relativeDrift = isOmniscient
+    ? { x: 0, y: 0, z: 0 }
+    : {
+      x: -worldToCube.x * CUBE_HALF * CUBE_RELATIVE_DRIFT,
+      y: -worldToCube.y * CUBE_HALF * CUBE_RELATIVE_DRIFT,
+      z: -worldToCube.z * CUBE_HALF * CUBE_RELATIVE_DRIFT,
+    };
+
   const shiftedVertices = CUBE_VERTICES.map((vertex) =>
     rotateCubeForMap(
       toModel({
@@ -150,10 +200,52 @@ export function SpacePositionMap({
         y: vertex.y + relativeDrift.y,
         z: vertex.z + relativeDrift.z,
       }),
+      resolvedRotation,
     ),
   );
   const projectedShiftedVertices = shiftedVertices.map((vertex) => toOrthographicProjection(vertex, cx, cy, 1));
   const activeVertices = projectedShiftedVertices;
+
+  const projectCubePoint = (point: Point3D) => {
+    const rotated = rotateCubeForMap(toModel(point), resolvedRotation);
+    return {
+      projected: toOrthographicProjection(rotated, cx, cy, 1),
+      depth: rotated.z,
+    };
+  };
+
+  const toNormalizedPoint = (point: SpacePositionMapPoint) => {
+    if (point.normalized) {
+      return {
+        x: clamp(point.x, -1, 1),
+        y: clamp(point.y, -1, 1),
+        z: clamp(point.z, -1, 1),
+      };
+    }
+
+    return {
+      x: clamp(point.x / CONFIG.CUBE_SIZE, -1, 1),
+      y: clamp(point.y / CONFIG.CUBE_SIZE, -1, 1),
+      z: clamp(point.z / CONFIG.CUBE_SIZE, -1, 1),
+    };
+  };
+
+  const projectedStars = starPoints
+    .map((point) => {
+      const normalized = toNormalizedPoint(point);
+      const { projected, depth } = projectCubePoint(normalized);
+      return { ...point, projected, depth };
+    })
+    .sort((left, right) => left.depth - right.depth);
+
+  const projectedAnchors = anchorPoints
+    .map((point) => {
+      const normalized = toNormalizedPoint(point);
+      const { projected, depth } = projectCubePoint(normalized);
+      return { ...point, projected, depth };
+    })
+    .sort((left, right) => left.depth - right.depth);
+
   const spawn = toOrthographicProjection(
     rotateCubeForMap(
       toModel({
@@ -161,6 +253,7 @@ export function SpacePositionMap({
         y: relativeDrift.y,
         z: relativeDrift.z,
       }),
+      resolvedRotation,
     ),
     cx,
     cy,
@@ -173,6 +266,7 @@ export function SpacePositionMap({
         y: amplifiedWorldToCube.y * CUBE_HALF,
         z: amplifiedWorldToCube.z * CUBE_HALF,
       }),
+      resolvedRotation,
     ),
     cx,
     cy,
@@ -201,7 +295,7 @@ export function SpacePositionMap({
     z: clamp((amplifiedWorldToCube.z * CUBE_HALF) + mappedVelocity.z, -CUBE_HALF, CUBE_HALF),
   };
   const velocityTip = toOrthographicProjection(
-    rotateCubeForMap(toModel(velocityTip3D)),
+    rotateCubeForMap(toModel(velocityTip3D), resolvedRotation),
     cx,
     cy,
     1,
@@ -226,6 +320,9 @@ export function SpacePositionMap({
     activeVertices[7],
     activeVertices[4],
   ];
+
+  const shouldShowShip = showShip ?? !isOmniscient;
+  const shouldShowSpawn = showSpawn ?? !isOmniscient;
 
   return (
     <div
@@ -256,6 +353,9 @@ export function SpacePositionMap({
           <filter id="gpsVelocityGlow" x="-50%" y="-50%" width="200%" height="200%">
             <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#7fffb0" floodOpacity="0.8" />
           </filter>
+          <filter id="gpsPointGlow" x="-70%" y="-70%" width="240%" height="240%">
+            <feDropShadow dx="0" dy="0" stdDeviation="1.2" floodColor="#ffffff" floodOpacity="0.45" />
+          </filter>
         </defs>
 
         <polygon
@@ -267,53 +367,92 @@ export function SpacePositionMap({
           strokeOpacity="0.9"
         />
 
-        {backCubeEdges.map(({ a, b }) => {
-          return (
-            <line
-              key={`cube-edge-back-${a}-${b}`}
-              x1={activeVertices[a].x}
-              y1={activeVertices[a].y}
-              x2={activeVertices[b].x}
-              y2={activeVertices[b].y}
-              stroke="rgba(120, 180, 230, 0.28)"
-              strokeWidth={0.9}
-              strokeDasharray="3 4"
-              strokeLinecap="round"
+        {backCubeEdges.map(({ a, b }) => (
+          <line
+            key={`cube-edge-back-${a}-${b}`}
+            x1={activeVertices[a].x}
+            y1={activeVertices[a].y}
+            x2={activeVertices[b].x}
+            y2={activeVertices[b].y}
+            stroke="rgba(120, 180, 230, 0.28)"
+            strokeWidth={0.9}
+            strokeDasharray="3 4"
+            strokeLinecap="round"
+          />
+        ))}
+
+        {projectedStars.map((point) => (
+          <circle
+            key={`star-point-${point.id}`}
+            cx={point.projected.x}
+            cy={point.projected.y}
+            r={point.size ?? (point.emphasis ? 3.8 : 2.15)}
+            fill={point.color}
+            fillOpacity={point.opacity ?? (point.emphasis ? 1 : 0.82)}
+            stroke={point.emphasis ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.3)'}
+            strokeWidth={point.emphasis ? 1.2 : 0.45}
+            filter="url(#gpsPointGlow)"
+          />
+        ))}
+
+        {frontCubeEdges.map(({ a, b }) => (
+          <line
+            key={`cube-edge-front-${a}-${b}`}
+            x1={activeVertices[a].x}
+            y1={activeVertices[a].y}
+            x2={activeVertices[b].x}
+            y2={activeVertices[b].y}
+            stroke="rgba(215, 244, 255, 0.94)"
+            strokeWidth={1.28}
+            strokeLinecap="round"
+          />
+        ))}
+
+        {projectedAnchors.map((point) => (
+          <g key={`anchor-point-${point.id}`}>
+            <circle
+              cx={point.projected.x}
+              cy={point.projected.y}
+              r={point.emphasis ? 9 : 7}
+              fill="none"
+              stroke="rgba(255,255,255,0.16)"
+              strokeDasharray="2 3"
             />
-          );
-        })}
-
-        {frontCubeEdges.map(({ a, b }) => {
-          return (
-            <line
-              key={`cube-edge-front-${a}-${b}`}
-              x1={activeVertices[a].x}
-              y1={activeVertices[a].y}
-              x2={activeVertices[b].x}
-              y2={activeVertices[b].y}
-              stroke="rgba(215, 244, 255, 0.94)"
-              strokeWidth={1.28}
-              strokeLinecap="round"
+            <circle
+              cx={point.projected.x}
+              cy={point.projected.y}
+              r={point.size ?? (point.emphasis ? 5.8 : 4.5)}
+              fill={point.color}
+              fillOpacity={point.opacity ?? 1}
+              stroke={point.emphasis ? '#fff6c5' : 'rgba(255,255,255,0.9)'}
+              strokeWidth={point.emphasis ? 1.4 : 1}
+              filter="url(#gpsPointGlow)"
             />
-          );
-        })}
+          </g>
+        ))}
 
-        <line
-          x1={spawn.x}
-          y1={spawn.y}
-          x2={ship.x}
-          y2={ship.y}
-          stroke="rgba(255, 214, 116, 0.35)"
-          strokeWidth={1}
-          strokeDasharray="4 2"
-        />
+        {shouldShowShip && shouldShowSpawn && (
+          <line
+            x1={spawn.x}
+            y1={spawn.y}
+            x2={ship.x}
+            y2={ship.y}
+            stroke="rgba(255, 214, 116, 0.35)"
+            strokeWidth={1}
+            strokeDasharray="4 2"
+          />
+        )}
 
-        <circle cx={spawn.x} cy={spawn.y} r={2.7} fill="#f5fdff" />
-        <text x={spawn.x + 6} y={spawn.y + 4} fill="#f5fdff" fontSize="8" opacity={0.95}>
-          SP
-        </text>
+        {shouldShowSpawn && (
+          <>
+            <circle cx={spawn.x} cy={spawn.y} r={2.7} fill="#f5fdff" />
+            <text x={spawn.x + 6} y={spawn.y + 4} fill="#f5fdff" fontSize="8" opacity={0.95}>
+              SP
+            </text>
+          </>
+        )}
 
-        {hasVelocity && (
+        {shouldShowShip && hasVelocity && (
           <>
             {(() => {
               const dx = velocityTip.x - ship.x;
@@ -360,25 +499,28 @@ export function SpacePositionMap({
           </>
         )}
 
-        <line
-          x1={ship.x - 2}
-          y1={ship.y - 2}
-          x2={ship.x + 2}
-          y2={ship.y + 2}
-          stroke="#fff8c0"
-          strokeWidth={1}
-        />
-        <line
-          x1={ship.x + 2}
-          y1={ship.y - 2}
-          x2={ship.x - 2}
-          y2={ship.y + 2}
-          stroke="#fff8c0"
-          strokeWidth={1}
-        />
-        <circle cx={ship.x} cy={ship.y} r={3.4} fill="#ffd36a" />
+        {shouldShowShip && (
+          <>
+            <line
+              x1={ship.x - 2}
+              y1={ship.y - 2}
+              x2={ship.x + 2}
+              y2={ship.y + 2}
+              stroke="#fff8c0"
+              strokeWidth={1}
+            />
+            <line
+              x1={ship.x + 2}
+              y1={ship.y - 2}
+              x2={ship.x - 2}
+              y2={ship.y + 2}
+              stroke="#fff8c0"
+              strokeWidth={1}
+            />
+            <circle cx={ship.x} cy={ship.y} r={3.4} fill="#ffd36a" />
+          </>
+        )}
       </svg>
-
     </div>
   );
 }

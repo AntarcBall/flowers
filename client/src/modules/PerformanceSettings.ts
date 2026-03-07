@@ -25,6 +25,7 @@ export type SpacePerformanceSettings = {
   labelConeScale: number;
   labelFontScale: number;
   labelFontMin: number;
+  targetPanelMinSize: number;
   labelOffsetX: number;
   labelOffsetY: number;
   aimSampleStep: number;
@@ -34,6 +35,7 @@ export type SpacePerformanceSettings = {
 };
 
 export const LABEL_FONT_MIN_MAX = 750;
+export const TARGET_PANEL_MIN_MAX = 750;
 
 export const DEFAULT_SPACE_PERFORMANCE_SETTINGS: SpacePerformanceSettings = {
   enabled: true,
@@ -60,6 +62,7 @@ export const DEFAULT_SPACE_PERFORMANCE_SETTINGS: SpacePerformanceSettings = {
   labelConeScale: 0.9,
   labelFontScale: 1,
   labelFontMin: 10,
+  targetPanelMinSize: 176,
   labelOffsetX: 0,
   labelOffsetY: 0,
   aimSampleStep: 1,
@@ -139,6 +142,11 @@ export function normalizeSpacePerformanceSettings(
       Math.round(input.labelFontMin ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelFontMin),
       1,
       LABEL_FONT_MIN_MAX,
+    ),
+    targetPanelMinSize: clamp(
+      Math.round(input.targetPanelMinSize ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.targetPanelMinSize),
+      1,
+      TARGET_PANEL_MIN_MAX,
     ),
     labelOffsetX: Math.round(clamp(input.labelOffsetX ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetX, -1000, 100)),
     labelOffsetY: Math.round(clamp(input.labelOffsetY ?? DEFAULT_SPACE_PERFORMANCE_SETTINGS.labelOffsetY, -300, 100)),

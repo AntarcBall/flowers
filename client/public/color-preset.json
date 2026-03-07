@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "name": "default-space-palette",
+  "updatedAt": "2026-03-07T04:40:12.349Z",
+  "tuning": {
+    "luminanceMin": 0.16,
+    "luminanceMax": 0.84,
+    "saturationMin": 44,
+    "saturationMax": 92,
+    "smoothingRadius": 0.0205,
+    "paletteSharpness": 3.95,
+    "huePhaseAmplitude": 0.044,
+    "lightnessSwing": 8.25,
+    "chromaJitter": 12.5
+  },
+  "anchors": [
+    {
+      "id": "red",
+      "label": "Red",
+      "x": 1.3199999999999998,
+      "y": -0.16,
+      "z": -0.38000000000000017,
+      "r": 141,
+      "g": 46,
+      "b": 48,
+      "bias": 1.12
+    },
+    {
+      "id": "yellow",
+      "label": "Yellow",
+      "x": -0.17000000000000004,
+      "y": -0.24999999999999994,
+      "z": -0.54,
+      "r": 250,
+      "g": 255,
+      "b": 51,
+      "bias": 1.1
+    },
+    {
+      "id": "green",
+      "label": "Green",
+      "x": 0.18000000000000005,
+      "y": 0.2500000000000001,
+      "z": -0.62,
+      "r": 41,
+      "g": 199,
+      "b": 71,
+      "bias": 1.08
+    },
+    {
+      "id": "blue",
+      "label": "Blue",
+      "x": -0.95,
+      "y": -0.2,
+      "z": 0.13,
+      "r": 56,
+      "g": 128,
+      "b": 245,
+      "bias": 1.05
+    },
+    {
+      "id": "purple",
+      "label": "Purple",
+      "x": -0.3600000000000001,
+      "y": -0.6799999999999999,
+      "z": -0.06,
+      "r": 143,
+      "g": 77,
+      "b": 214,
+      "bias": 1.06
+    }
+  ]
+}

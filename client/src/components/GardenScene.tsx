@@ -6,15 +6,20 @@ import { OrthographicCamera as ThreeOrthographicCamera, PointLight, DoubleSide }
 import { CONFIG } from '../config';
 import { Flower } from './Flower';
 import type { FlowerData } from '../modules/PersistenceService';
+import type { GardenDisplaySettings } from '../modules/GardenDisplaySettings';
 
-const GARDEN_LABEL_FONT_SCALE = 2;
-const GARDEN_LABEL_FONT_SIZE = 270 * GARDEN_LABEL_FONT_SCALE;
-const GARDEN_LABEL_PADDING_X = 195 * GARDEN_LABEL_FONT_SCALE;
-const GARDEN_LABEL_PADDING_Y = 67.5 * GARDEN_LABEL_FONT_SCALE;
+const GARDEN_LABEL_BASE_SCALE = 2;
+const GARDEN_LABEL_FONT_SIZE = 270 * GARDEN_LABEL_BASE_SCALE;
+const GARDEN_LABEL_PADDING_X = 195 * GARDEN_LABEL_BASE_SCALE;
+const GARDEN_LABEL_PADDING_Y = 67.5 * GARDEN_LABEL_BASE_SCALE;
 const GARDEN_FLOWER_SCALE = 104;
 
-export const GardenScene = () => {
-  const manager = useMemo(() => new GardenManager(), []);
+export const GardenScene = ({
+  displaySettings,
+}: {
+  displaySettings: GardenDisplaySettings;
+}) => {
+  const manager = useMemo(() => new GardenManager(displaySettings), []);
   const { camera } = useThree();
   const [flowers, setFlowers] = useState<FlowerData[]>(manager.flowers);
   const [lifeClock, setLifeClock] = useState(() => Date.now());
@@ -27,6 +32,12 @@ export const GardenScene = () => {
     manager.init();
     setFlowers([...manager.flowers]);
   }, [manager]);
+
+  useEffect(() => {
+    manager.applyDisplaySettings(displaySettings);
+    manager.reloadFromStorage(true);
+    setFlowers([...manager.flowers]);
+  }, [displaySettings.flowerScaleMeanMultiplier, displaySettings.labelScale, manager]);
 
   useEffect(() => {
     const syncGardenState = () => {
@@ -102,10 +113,11 @@ export const GardenScene = () => {
       </mesh>
 
       {flowers.map((flower: FlowerData) => {
-        const { growth, vitality } = manager.getFlowerState(flower, lifeClock);
+        const { growth, vitality, saturationFactor } = manager.getFlowerState(flower, lifeClock);
         const labelOffsetX = flower.labelOffsetX ?? 0;
         const labelOffsetY = flower.labelOffsetY ?? 0;
         const labelOpacity = 0.2 + vitality * 0.8;
+        const labelScale = displaySettings.labelScale;
 
         return (
           <group key={flower.id} position={[flower.x, flower.y, CONFIG.FLOWER_ANCHOR_Z]}>
@@ -115,6 +127,7 @@ export const GardenScene = () => {
               scale={GARDEN_FLOWER_SCALE * (flower.scaleFactor ?? 1)}
               growth={growth}
               vitality={vitality}
+              saturationFactor={saturationFactor}
             />
             {flower.word && (
               <Html position={[labelOffsetX, labelOffsetY, 0.35]} center distanceFactor={22} transform>
@@ -122,14 +135,14 @@ export const GardenScene = () => {
                   style={{
                     pointerEvents: 'none',
                     whiteSpace: 'nowrap',
-                    padding: `${GARDEN_LABEL_PADDING_Y}px ${GARDEN_LABEL_PADDING_X}px`,
+                    padding: `${GARDEN_LABEL_PADDING_Y * labelScale}px ${GARDEN_LABEL_PADDING_X * labelScale}px`,
                     borderRadius: 999,
-                    fontSize: GARDEN_LABEL_FONT_SIZE,
+                    fontSize: GARDEN_LABEL_FONT_SIZE * labelScale,
                     color: 'rgba(234, 247, 255, 0.95)',
                     background: 'linear-gradient(115deg, rgba(3, 12, 34, 0.78), rgba(9, 28, 57, 0.72))',
                     border: '1px solid rgba(156, 214, 255, 0.45)',
                     boxShadow: '0 2px 10px rgba(2, 12, 32, 0.5)',
-                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontFamily: CONFIG.TEXT_STYLE.fontFamily,
                     letterSpacing: 0.25,
                     backdropFilter: 'blur(1.5px)',
                     opacity: Number(labelOpacity.toFixed(3)),

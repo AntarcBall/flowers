@@ -10,11 +10,14 @@ import {
 import { CONFIG } from '../config';
 import { PersistenceService } from '../modules/PersistenceService';
 import type { FlowerData } from '../modules/PersistenceService';
+import { GardenManager } from '../modules/GardenManager';
+import { loadGardenDisplaySettings } from '../modules/GardenDisplaySettings';
 import type { StarSelectionData } from '../types';
 import { SELECTED_STAR_SESSION_KEY } from '../types';
 import {
   DEFAULT_SPACE_PERFORMANCE_SETTINGS,
   LABEL_FONT_MIN_MAX,
+  TARGET_PANEL_MIN_MAX,
   loadSpacePerformanceSettings,
   normalizeSpacePerformanceSettings,
   saveSpacePerformanceSettings,
@@ -54,9 +57,6 @@ type SpacePageProps = {
 };
 
 const FIXED_START_SPEED = 12;
-const FLOWER_RETENTION_HOURS = 8;
-const FLOWER_RETENTION_MS = FLOWER_RETENTION_HOURS * 60 * 60 * 1000;
-const FLOWER_SCREEN_CAPACITY_FOR_RETENTION = 15;
 const SEED_INDICATOR_COUNT = 3;
 const SEED_INDICATOR_Z_INDEX = 3001;
 const normalizeSeedLimit = (value?: number) => {
@@ -70,17 +70,6 @@ const makeRandomPosition = () => ({
   x: Math.random() * CONFIG.GARDEN_WIDTH,
   y: Math.random() * CONFIG.GARDEN_HEIGHT,
 });
-
-const resolvePlantedAt = (flower: FlowerData, fallback: number) => {
-  const plantedAt = Number(flower.plantedAt);
-  if (Number.isFinite(plantedAt) && plantedAt > 0) return plantedAt;
-  return Number.isFinite(flower.timestamp) ? flower.timestamp : fallback;
-};
-
-const removeAgedFlowersWhenOverCapacity = (flowers: FlowerData[], now: number) => {
-  if (flowers.length < FLOWER_SCREEN_CAPACITY_FOR_RETENTION) return flowers;
-  return flowers.filter((flower) => now - resolvePlantedAt(flower, now) < FLOWER_RETENTION_MS);
-};
 const makeFlowerId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? (crypto as Crypto).randomUUID()
@@ -220,7 +209,7 @@ export default function SpacePage({
     };
 
     const merged = [...existing, newFlower];
-    const nextFlowers = removeAgedFlowersWhenOverCapacity(merged, nowAtPlant);
+    const nextFlowers = GardenManager.layoutFlowers(merged, loadGardenDisplaySettings());
     PersistenceService.save(nextFlowers);
     sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
     globalPlantLockUntilRef.current = now + PLANT_LOCK_WINDOW_MS;
@@ -829,6 +818,18 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
+            target panel min size ({perf.targetPanelMinSize}px)
+            <input
+              type="range"
+              min={1}
+              max={TARGET_PANEL_MIN_MAX}
+              step={1}
+              value={perf.targetPanelMinSize}
+              onChange={(e) => updatePerf({ targetPanelMinSize: Number(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 8 }}>
             launch trail ({perf.launchTrailLimit})
             <input
               type="range"
@@ -890,6 +891,7 @@ export default function SpacePage({
                   labelUpdateIntervalMs: 120,
                   labelFontScale: 1,
                   labelFontMin: 10,
+                  targetPanelMinSize: 176,
                   labelConeScale: 0.82,
                   shipScale: 1,
                   launchTrailLimit: 2,

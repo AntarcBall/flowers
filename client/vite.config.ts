@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         space: fileURLToPath(new URL('./index.html', import.meta.url)),
         garden: fileURLToPath(new URL('./garden.html', import.meta.url)),
+        custom: fileURLToPath(new URL('./custom/index.html', import.meta.url)),
       },
     },
   },

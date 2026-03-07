@@ -10,6 +10,7 @@ type FlowerProps = {
   scale?: number;
   growth?: number;
   vitality?: number;
+  saturationFactor?: number;
 };
 
 const clamp = (value: number, min: number, max: number) => {
@@ -70,15 +71,38 @@ function getVitalityColor(color: string, vitality: number) {
   return `#${parsed.getHexString()}`;
 }
 
-const FlowerCore = ({ params, color, scale = 1, growth, vitality = 1 }: FlowerProps) => {
+function getSaturationAdjustedColor(color: string, saturationFactor: number) {
+  const parsed = new Color(color);
+  const hsl = { h: 0, s: 0, l: 0 };
+  parsed.getHSL(hsl);
+  parsed.setHSL(hsl.h, clamp(hsl.s * saturationFactor, 0, 1), hsl.l);
+  return `#${parsed.getHexString()}`;
+}
+
+const FlowerCore = ({
+  params,
+  color,
+  scale = 1,
+  growth,
+  vitality = 1,
+  saturationFactor = 1,
+}: FlowerProps) => {
   const resolvedParams = useMemo(() => normalizeFlowerParams(params), [params]);
   const normalizedGrowth = clamp(growth === undefined ? 1 : growth, 0, 1);
   const normalizedVitality = clamp(vitality, 0, 1);
+  const normalizedSaturation = clamp(saturationFactor, 0, 1);
   const vigor = normalizedVitality;
-  const vitalityColor = useMemo(() => getVitalityColor(color, normalizedVitality), [color, normalizedVitality]);
+  const displayColor = useMemo(
+    () => getSaturationAdjustedColor(color, normalizedSaturation),
+    [color, normalizedSaturation],
+  );
+  const vitalityColor = useMemo(
+    () => getVitalityColor(displayColor, normalizedVitality),
+    [displayColor, normalizedVitality],
+  );
   const texture = useMemo(
-    () => getFlowerTexture(resolvedParams, color, normalizedGrowth),
-    [resolvedParams, color, normalizedGrowth],
+    () => getFlowerTexture(resolvedParams, displayColor, normalizedGrowth),
+    [resolvedParams, displayColor, normalizedGrowth],
   );
   const groupScale = scale * (0.25 + 0.75 * normalizedGrowth);
   const alpha = (0.35 + 0.65 * normalizedGrowth) * (0.25 + 0.75 * vigor);

@@ -5,11 +5,18 @@ import type { StarSelectionData } from '../types';
 import { CONFIG } from '../config';
 import { normalizeFlowerParams } from './FlowerShape';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  DEFAULT_GARDEN_DISPLAY_SETTINGS,
+  normalizeGardenDisplaySettings,
+  type GardenDisplaySettings,
+} from './GardenDisplaySettings';
 
 const FLOWER_VISUAL_RADIUS = 104;
 const FLOWER_LABEL_GROWTH_MARGIN = 4;
 const FLOWER_SCALE_MIN = 1;
 const FLOWER_SCALE_MAX = 3.15;
+const FLOWER_SCALE_RENDER_MIN = 0.35;
+const FLOWER_SCALE_RENDER_MAX = 4.8;
 const FLOWER_SCALE_CENTROID = 0.5;
 const FLOWER_SCALE_SPREAD = 0.2;
 const LABEL_EDGE_GUARD = 10;
@@ -25,8 +32,11 @@ const FLOWER_HITBOX_SCALE = 1.4;
 const LABEL_COLLISION_GAIN = 1.45;
 const MIN_LIFESPAN_MS = 30 * 1000;
 const MIN_WITHERING_MS = 5000;
-const FLOWER_RETENTION_MS = 1000 * 60 * 60 * 8;
 const FLOWER_SCREEN_CAPACITY_FOR_RETENTION = 15;
+const FLOWER_GROWTH_STAGE_COUNT = 6;
+const FLOWER_AGING_STAGE_MS = 1000 * 60 * 60;
+const FLOWER_AGING_STAGE_COUNT = 2;
+const FLOWER_AGING_SATURATION_DROP = 0.3;
 
 export class GardenManager {
   flowers: FlowerData[] = [];
@@ -37,6 +47,29 @@ export class GardenManager {
   private driftPhase = 0;
   private readonly driftRadiusX = 4.6;
   private readonly driftRadiusY = 3.3;
+  private displaySettings: GardenDisplaySettings;
+
+  constructor(displaySettings: Partial<GardenDisplaySettings> = {}) {
+    this.displaySettings = normalizeGardenDisplaySettings({
+      ...DEFAULT_GARDEN_DISPLAY_SETTINGS,
+      ...displaySettings,
+    });
+  }
+
+  static layoutFlowers(
+    flowers: FlowerData[],
+    displaySettings: Partial<GardenDisplaySettings> = {},
+  ) {
+    const manager = new GardenManager(displaySettings);
+    return manager.ensureGardenLayout(flowers);
+  }
+
+  applyDisplaySettings(displaySettings: Partial<GardenDisplaySettings> = {}) {
+    this.displaySettings = normalizeGardenDisplaySettings({
+      ...this.displaySettings,
+      ...displaySettings,
+    });
+  }
 
   init() {
     this.readOnlyMode = true;
@@ -59,7 +92,7 @@ export class GardenManager {
   }
 
   private materializeStoredFlowers() {
-    return this.ensureLabelPlacement(PersistenceService.load());
+    return this.ensureGardenLayout(PersistenceService.load());
   }
 
   private resolveLifeSpanMs(flower: FlowerData) {
@@ -76,6 +109,10 @@ export class GardenManager {
   }
 
   private filterExpired(flowers: FlowerData[], now = Date.now()) {
+    if (flowers.length >= FLOWER_SCREEN_CAPACITY_FOR_RETENTION) {
+      return { flowers, removed: 0 };
+    }
+
     const alive: FlowerData[] = [];
     let removed = 0;
 
@@ -83,22 +120,11 @@ export class GardenManager {
       const plantedAt = Number.isFinite(flower.plantedAt) ? flower.plantedAt : flower.timestamp;
       const ageMs = Math.max(0, now - plantedAt);
       const lifeSpanMs = this.resolveLifeSpanMs(flower);
-      if (ageMs < lifeSpanMs) {
+      const removalAt = lifeSpanMs + FLOWER_AGING_STAGE_MS * FLOWER_AGING_STAGE_COUNT;
+      if (ageMs < removalAt) {
         alive.push(flower);
       } else {
         removed += 1;
-      }
-    }
-
-    if (alive.length >= FLOWER_SCREEN_CAPACITY_FOR_RETENTION) {
-      const agedAlive = alive.length >= FLOWER_SCREEN_CAPACITY_FOR_RETENTION;
-      if (agedAlive) {
-        const pruned = alive.filter((flower) => {
-          const plantedAt = Number.isFinite(flower.plantedAt) ? flower.plantedAt : flower.timestamp;
-          return now - plantedAt < FLOWER_RETENTION_MS;
-        });
-        removed += alive.length - pruned.length;
-        return { flowers: pruned, removed };
       }
     }
 
@@ -165,12 +191,10 @@ export class GardenManager {
     return this.clamp01(FLOWER_SCALE_CENTROID + normalSample * FLOWER_SCALE_SPREAD);
   }
 
-  private resolveFlowerScale(word: string, sourceScale?: number) {
-    const explicit = Number(sourceScale);
-    if (Number.isFinite(explicit)) {
-      return this.clamp(explicit, FLOWER_SCALE_MIN, FLOWER_SCALE_MAX);
-    }
-    return FLOWER_SCALE_MIN + this.resolveFlowerScaleNoise(word) * (FLOWER_SCALE_MAX - FLOWER_SCALE_MIN);
+  private resolveFlowerScale(word: string) {
+    const baseScale = FLOWER_SCALE_MIN + this.resolveFlowerScaleNoise(word) * (FLOWER_SCALE_MAX - FLOWER_SCALE_MIN);
+    const scaled = baseScale * this.displaySettings.flowerScaleMeanMultiplier;
+    return this.clamp(scaled, FLOWER_SCALE_RENDER_MIN, FLOWER_SCALE_RENDER_MAX);
   }
 
   private resolveFlowerVisualRadius(scaleFactor: number) {
@@ -180,7 +204,7 @@ export class GardenManager {
   private estimateLabelRadius(word: string) {
     const chars = Math.max(1, [...word].length);
     const base = 42 + 4.8 * chars + Math.sqrt(chars) * 18;
-    return Math.max(48, Math.min(220, Math.round(base)));
+    return Math.max(24, Math.min(330, Math.round(base * this.displaySettings.labelScale)));
   }
 
   private resolveLabelRadius(word: string) {
@@ -415,15 +439,21 @@ export class GardenManager {
     };
   }
 
-  private ensureLabelPlacement(rawFlowers: FlowerData[]) {
+  private ensureGardenLayout(rawFlowers: FlowerData[]) {
     const normalized: FlowerData[] = [];
     for (const flower of rawFlowers) {
       const word = flower.word || 'Unknown Bloom';
       const labelRadius = this.resolveLabelRadius(word);
-      const resolvedScale = this.resolveFlowerScale(word, flower.scaleFactor);
-      const { offsetX, offsetY } = this.resolveLabelPlacement(
+      const resolvedScale = this.resolveFlowerScale(word);
+      const { x, y } = this.resolveFlowerPlacement(
         flower.x,
         flower.y,
+        normalized,
+        resolvedScale,
+      );
+      const { offsetX, offsetY } = this.resolveLabelPlacement(
+        x,
+        y,
         labelRadius,
         normalized,
         resolvedScale,
@@ -431,6 +461,8 @@ export class GardenManager {
 
       normalized.push({
         ...flower,
+        x,
+        y,
         word,
         scaleFactor: resolvedScale,
         labelOffsetX: offsetX,
@@ -473,22 +505,31 @@ export class GardenManager {
     const ageMs = Math.max(0, now - plantedAt);
     const lifeSpanMs = this.resolveLifeSpanMs(flower);
     const witheringMs = this.resolveWitheringMs(flower, lifeSpanMs);
-    const witherStartMs = Math.max(0, lifeSpanMs - witheringMs);
-    let vitality = 1;
+    const bypassAging = this.flowers.length >= FLOWER_SCREEN_CAPACITY_FOR_RETENTION;
+    let saturationFactor = 1;
 
-    if (ageMs >= lifeSpanMs) {
-      vitality = 0;
-    } else if (ageMs > witherStartMs) {
-      vitality = 1 - (ageMs - witherStartMs) / witheringMs;
+    if (!bypassAging && ageMs >= lifeSpanMs) {
+      const agingStage = Math.min(
+        FLOWER_AGING_STAGE_COUNT,
+        Math.floor((ageMs - lifeSpanMs) / FLOWER_AGING_STAGE_MS) + 1,
+      );
+      saturationFactor = Math.max(0.1, 1 - agingStage * FLOWER_AGING_SATURATION_DROP);
     }
+
+    const rawGrowth = Math.min(1, Math.max(0, ageMs / CONFIG.FLOWER_GROWTH_MS));
+    const growth =
+      rawGrowth >= 1
+        ? 1
+        : Math.floor(rawGrowth * FLOWER_GROWTH_STAGE_COUNT) / FLOWER_GROWTH_STAGE_COUNT;
 
     return {
       plantedAt,
       ageMs,
-      growth: Math.min(1, Math.max(0, ageMs / CONFIG.FLOWER_GROWTH_MS)),
+      growth,
       lifeSpanMs,
       witheringMs,
-      vitality: Math.max(0, Math.min(1, vitality)),
+      vitality: 1,
+      saturationFactor,
     };
   }
 
