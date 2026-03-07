@@ -47,13 +47,6 @@ const CUBE_EDGES: Array<[number, number]> = [
   [3, 7],
 ];
 
-const CUBE_ORTHO_EDGE_FACES: Array<[number, number]> = [
-  [0, 3],
-  [1, 2],
-  [4, 7],
-  [5, 6],
-];
-
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -110,6 +103,7 @@ function toPoints(points: Point2D[]) {
 const SPEED_ARROW_SCALE = 0.9;
 const CUBE_RELATIVE_DRIFT = 0.28;
 const MAP_Y_LIFT = -44;
+const SHIP_TRACK_GAIN = 2.5;
 
 export function SpacePositionMap({
   position,
@@ -131,6 +125,11 @@ export function SpacePositionMap({
     x: clamp((position.x - SPAWN_POINT.x) / mapSpan, -1, 1),
     y: clamp((position.y - SPAWN_POINT.y) / mapSpan, -1, 1),
     z: clamp((position.z - SPAWN_POINT.z) / mapSpan, -1, 1),
+  };
+  const amplifiedWorldToCube = {
+    x: clamp(worldToCube.x * SHIP_TRACK_GAIN, -1, 1),
+    y: clamp(worldToCube.y * SHIP_TRACK_GAIN, -1, 1),
+    z: clamp(worldToCube.z * SHIP_TRACK_GAIN, -1, 1),
   };
 
   const cubeScale = (size - margin * 2) * 0.27;
@@ -170,9 +169,9 @@ export function SpacePositionMap({
   const ship = toOrthographicProjection(
     rotateCubeForMap(
       toModel({
-        x: worldToCube.x * CUBE_HALF,
-        y: worldToCube.y * CUBE_HALF,
-        z: worldToCube.z * CUBE_HALF,
+        x: amplifiedWorldToCube.x * CUBE_HALF,
+        y: amplifiedWorldToCube.y * CUBE_HALF,
+        z: amplifiedWorldToCube.z * CUBE_HALF,
       }),
     ),
     cx,
@@ -197,9 +196,9 @@ export function SpacePositionMap({
     ),
   };
   const velocityTip3D = {
-    x: clamp((worldToCube.x * CUBE_HALF) + mappedVelocity.x, -CUBE_HALF, CUBE_HALF),
-    y: clamp((worldToCube.y * CUBE_HALF) + mappedVelocity.y, -CUBE_HALF, CUBE_HALF),
-    z: clamp((worldToCube.z * CUBE_HALF) + mappedVelocity.z, -CUBE_HALF, CUBE_HALF),
+    x: clamp((amplifiedWorldToCube.x * CUBE_HALF) + mappedVelocity.x, -CUBE_HALF, CUBE_HALF),
+    y: clamp((amplifiedWorldToCube.y * CUBE_HALF) + mappedVelocity.y, -CUBE_HALF, CUBE_HALF),
+    z: clamp((amplifiedWorldToCube.z * CUBE_HALF) + mappedVelocity.z, -CUBE_HALF, CUBE_HALF),
   };
   const velocityTip = toOrthographicProjection(
     rotateCubeForMap(toModel(velocityTip3D)),
@@ -211,6 +210,13 @@ export function SpacePositionMap({
     Math.pow(velocity.x, 2) + Math.pow(velocity.y, 2) + Math.pow(velocity.z, 2),
   );
   const hasVelocity = velocityMagnitude > 0.0001;
+  const cubeEdges = CUBE_EDGES.map(([a, b]) => ({
+    a,
+    b,
+    depth: (shiftedVertices[a].z + shiftedVertices[b].z) / 2,
+  })).sort((left, right) => left.depth - right.depth);
+  const backCubeEdges = cubeEdges.filter((edge) => edge.depth < 0);
+  const frontCubeEdges = cubeEdges.filter((edge) => edge.depth >= 0);
 
   const contour = [
     activeVertices[0],
@@ -261,102 +267,36 @@ export function SpacePositionMap({
           strokeOpacity="0.9"
         />
 
-        <line
-          x1={activeVertices[0].x}
-          y1={activeVertices[0].y}
-          x2={activeVertices[1].x}
-          y2={activeVertices[1].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-          strokeLinejoin="round"
-        />
-        <line
-          x1={activeVertices[1].x}
-          y1={activeVertices[1].y}
-          x2={activeVertices[2].x}
-          y2={activeVertices[2].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-        <line
-          x1={activeVertices[2].x}
-          y1={activeVertices[2].y}
-          x2={activeVertices[3].x}
-          y2={activeVertices[3].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-        <line
-          x1={activeVertices[3].x}
-          y1={activeVertices[3].y}
-          x2={activeVertices[0].x}
-          y2={activeVertices[0].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-
-        <line
-          x1={activeVertices[5].x}
-          y1={activeVertices[5].y}
-          x2={activeVertices[6].x}
-          y2={activeVertices[6].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-        <line
-          x1={activeVertices[6].x}
-          y1={activeVertices[6].y}
-          x2={activeVertices[7].x}
-          y2={activeVertices[7].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-        <line
-          x1={activeVertices[7].x}
-          y1={activeVertices[7].y}
-          x2={activeVertices[4].x}
-          y2={activeVertices[4].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-        <line
-          x1={activeVertices[4].x}
-          y1={activeVertices[4].y}
-          x2={activeVertices[5].x}
-          y2={activeVertices[5].y}
-          stroke="rgba(170, 236, 255, 0.92)"
-          strokeWidth="1.4"
-        />
-
-        {CUBE_EDGES.map(([a, b]) => {
-          const isFront = (shiftedVertices[a].z + shiftedVertices[b].z) / 2 >= 0;
+        {backCubeEdges.map(({ a, b }) => {
           return (
             <line
-              key={`cube-edge-${a}-${b}`}
+              key={`cube-edge-back-${a}-${b}`}
               x1={activeVertices[a].x}
               y1={activeVertices[a].y}
               x2={activeVertices[b].x}
               y2={activeVertices[b].y}
-              stroke={isFront ? 'rgba(215, 244, 255, 0.9)' : 'rgba(120, 180, 230, 0.22)'}
-              strokeWidth={isFront ? 1.05 : 0.82}
-              strokeDasharray={isFront ? undefined : '3 4'}
+              stroke="rgba(120, 180, 230, 0.28)"
+              strokeWidth={0.9}
+              strokeDasharray="3 4"
               strokeLinecap="round"
             />
           );
         })}
 
-        {CUBE_ORTHO_EDGE_FACES.map(([a, b], i) => (
-          <line
-            key={`front-slice-${i}`}
-            x1={activeVertices[a].x}
-            y1={activeVertices[a].y}
-            x2={activeVertices[b].x}
-            y2={activeVertices[b].y}
-            stroke="rgba(255, 255, 255, 0.4)"
-            strokeWidth="0.7"
-            strokeDasharray="2 3"
-          />
-        ))}
+        {frontCubeEdges.map(({ a, b }) => {
+          return (
+            <line
+              key={`cube-edge-front-${a}-${b}`}
+              x1={activeVertices[a].x}
+              y1={activeVertices[a].y}
+              x2={activeVertices[b].x}
+              y2={activeVertices[b].y}
+              stroke="rgba(215, 244, 255, 0.94)"
+              strokeWidth={1.28}
+              strokeLinecap="round"
+            />
+          );
+        })}
 
         <line
           x1={spawn.x}

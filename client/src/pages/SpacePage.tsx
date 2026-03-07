@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { FlowerPreview } from '../components/FlowerPreview';
+import type { CSSProperties } from 'react';
 import { SpacePositionMap } from '../components/SpacePositionMap';
 import {
   SpaceScene,
@@ -27,9 +27,15 @@ type AimedStarData = StarSelectionData & {
   headingOffsetDeg?: number;
   embedding?: number[];
 };
-type AimEmbeddingPalette = { value: number; color: string };
 
 type SeedState = { used: number; remaining: number; total: number };
+type TelemetryState = {
+  speed: number;
+  position: { x: number; y: number; z: number };
+  velocity?: { x: number; y: number; z: number };
+  headingDeg?: number;
+  pitchDeg?: number;
+};
 
 type SpacePageProps = {
   initialSeedLimit?: number;
@@ -47,34 +53,17 @@ type SpacePageProps = {
   canPlant?: () => boolean;
 };
 
-const formatCoord = (value: number) => value.toFixed(2);
 const FIXED_START_SPEED = 12;
 const FLOWER_RETENTION_HOURS = 8;
 const FLOWER_RETENTION_MS = FLOWER_RETENTION_HOURS * 60 * 60 * 1000;
 const FLOWER_SCREEN_CAPACITY_FOR_RETENTION = 15;
+const SEED_INDICATOR_COUNT = 3;
+const SEED_INDICATOR_Z_INDEX = 3001;
 const normalizeSeedLimit = (value?: number) => {
   if (!Number.isFinite(value as number) || (value as number) <= 0) {
     return 3;
   }
   return Math.max(1, Math.floor(value as number));
-};
-
-const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
-const buildEmbeddingBars = (embedding?: number[] | null): AimEmbeddingPalette[] => {
-  const source = embedding ?? [];
-  return source.length === 0
-    ? []
-    : source.map((value, index) => {
-    const sample = Number.isFinite(value) ? value : 0.5;
-    const normalized = clamp01(sample);
-    const hue = 110 + (index / source.length) * 20;
-    const saturation = 28 + value * 60;
-    const lightness = 14 + normalized * 56;
-    return {
-      value: normalized,
-      color: `hsl(${hue}, ${saturation.toFixed(1)}%, ${lightness.toFixed(1)}%)`,
-    };
-  });
 };
 
 const makeRandomPosition = () => ({
@@ -109,9 +98,8 @@ export default function SpacePage({
 }: SpacePageProps) {
   const seedLimit = normalizeSeedLimit(initialSeedLimit);
 
-  const [debugMode, setDebugMode] = useState(false);
-  const [aimedStarData, setAimedStarData] = useState<AimedStarData | null>(null);
-  const [telemetry, setTelemetry] = useState({
+  const debugMode = false;
+  const [telemetry, setTelemetry] = useState<TelemetryState>({
     speed: FIXED_START_SPEED,
     position: { x: 0, y: 0, z: 0 },
     velocity: { x: 0, y: 0, z: FIXED_START_SPEED },
@@ -236,29 +224,32 @@ export default function SpacePage({
     PersistenceService.save(nextFlowers);
     sessionStorage.setItem(SELECTED_STAR_SESSION_KEY, JSON.stringify(data));
     globalPlantLockUntilRef.current = now + PLANT_LOCK_WINDOW_MS;
-    usedSeedsRef.current = usedSeedsRef.current + 1;
+    const nextUsedSeeds = usedSeedsRef.current + 1;
+    usedSeedsRef.current = nextUsedSeeds;
+    setUsedSeeds(nextUsedSeeds);
 
-    setUsedSeeds((current) => {
-      const next = current + 1;
-      const toastId = `${data.word}-${next}-${nowAtPlant}-${toastSequenceRef.current++}`;
-      setToasts((currentToasts) => [...currentToasts, { id: toastId, word: data.word }]);
-      const timerId = window.setTimeout(() => {
-        setToasts((currentToasts) => currentToasts.filter((entry) => entry.id !== toastId));
-      }, 2800);
-      toastTimers.current.set(toastId, timerId);
-      onSeedCommit?.({
-        id: data.id,
-        word: data.word,
-        color: data.color,
-        params: data.params,
-      });
-      return next;
+    const toastId = `${data.word}-${nextUsedSeeds}-${nowAtPlant}-${toastSequenceRef.current++}`;
+    setToasts((currentToasts) => [...currentToasts, { id: toastId, word: data.word }]);
+    const timerId = window.setTimeout(() => {
+      setToasts((currentToasts) => currentToasts.filter((entry) => entry.id !== toastId));
+      toastTimers.current.delete(toastId);
+    }, 2800);
+    toastTimers.current.set(toastId, timerId);
+
+    onSeedCommit?.({
+      id: data.id,
+      word: data.word,
+      color: data.color,
+      params: data.params,
     });
   };
 
   const handleAimChange = (next: AimedStarData | null) => {
-    setAimedStarData(next);
     onAimChange?.(next);
+  };
+
+  const handleTelemetryChange = (next: TelemetryState) => {
+    setTelemetry(next);
   };
 
   const handleHoldState = (next: SpacePlantHoldState) => {
@@ -281,13 +272,12 @@ export default function SpacePage({
   const showHud = perf.showHud;
   const showCrosshair = showHud && perf.hudCrosshair;
   const showSpeedometer = showHud && perf.hudSpeedometer;
-  const showTargetPanel = showHud && perf.hudTargetPanel;
-  const showRangeReadout = showHud && perf.hudRangeReadout;
   const showThrottle = showHud && perf.hudThrottleBar;
   const showPosition = showHud && perf.hudPositionPanel;
-  const showCompass = showHud && perf.hudHeadingCompass;
-  const embeddingBars = aimedStarData ? buildEmbeddingBars(aimedStarData.embedding) : [];
-  const hudPanelStyle = {
+  const positionPanelScale = 2.5;
+  const positionPanelMapSize = 170 * positionPanelScale;
+  const spentIndicatorCount = Math.min(SEED_INDICATOR_COUNT, seedState.used);
+  const hudPanelStyle: CSSProperties = {
     position: 'absolute',
     inset: 0,
     pointerEvents: 'none' as const,
@@ -309,7 +299,7 @@ export default function SpacePage({
           onSelectStar={handleSelectStar}
           debugMode={debugMode}
           onAimChange={handleAimChange}
-          onTelemetryChange={setTelemetry}
+          onTelemetryChange={handleTelemetryChange}
           performance={perf}
           onPlantHold={handleHoldState}
           onPlantHoldEvent={handleHoldEvent}
@@ -376,6 +366,40 @@ export default function SpacePage({
           </div>
         )}
 
+        {showHud && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 20,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: 18,
+              alignItems: 'center',
+              justifyContent: 'center',
+              // SpaceScene target HUD uses drei/Html zIndexRange up to 2000.
+              zIndex: SEED_INDICATOR_Z_INDEX,
+            }}
+          >
+            {Array.from({ length: SEED_INDICATOR_COUNT }, (_, index) => {
+              const spent = index < spentIndicatorCount;
+              return (
+                <div
+                  key={`seed-indicator-${index}`}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.96)',
+                    background: spent ? 'transparent' : 'rgba(255,255,255,0.98)',
+                    boxShadow: spent ? 'none' : '0 0 12px rgba(255,255,255,0.3)',
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+
         {holdState.active && (
           <div
             style={{
@@ -408,50 +432,6 @@ export default function SpacePage({
               </svg>
             </div>
             <div style={{ fontSize: 12 }}>plant {Math.round(holdState.progress * 100)}%</div>
-          </div>
-        )}
-
-        {showHud && aimedStarData && (
-          <div
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: 'calc(50% - 90px)',
-              width: 280,
-              transform: 'translateX(-50%)',
-              pointerEvents: 'none',
-              color: 'white',
-              textAlign: 'center',
-              zIndex: 6,
-            }}
-          >
-            <div style={{ marginBottom: 4, fontSize: 10, color: '#c6e3ff', opacity: 0.92 }}>
-              임베딩 스펙트럼 ({embeddingBars.length}D)
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${Math.max(1, embeddingBars.length)}, minmax(0, 1fr))`,
-                gap: 2,
-                height: 12,
-                alignItems: 'stretch',
-                opacity: 0.95,
-              }}
-            >
-              {embeddingBars.map((segment, segmentIndex) => (
-                <div
-                  key={`${aimedStarData.word}-${segmentIndex}`}
-                  style={{
-                    height: 12,
-                    background: segment.color,
-                    opacity: 0.55 + segment.value * 0.45,
-                    borderRadius: 2,
-                    boxShadow: `inset 0 0 0 1px rgba(255,255,255,${0.18 + segment.value * 0.4})`,
-                  }}
-                  title={`embedding ${segmentIndex + 1}: ${segment.value.toFixed(3)}`}
-                />
-              ))}
-            </div>
           </div>
         )}
 
@@ -549,71 +529,27 @@ export default function SpacePage({
           </>
         )}
 
-        {showTargetPanel && aimedStarData && (
-          <div
-            style={{
-              position: 'absolute',
-              left: 20,
-              top: 96,
-              ...CONFIG.PREVIEW,
-              color: 'white',
-              pointerEvents: 'none',
-            }}
-          >
-            <div style={{ padding: '5px', textAlign: 'center', fontSize: 12 }}>{aimedStarData.word}</div>
-            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '5px' }}>
-              <FlowerPreview params={aimedStarData.params} color={aimedStarData.color} size={120} />
-            </div>
-            {showRangeReadout && aimedStarData.distance !== undefined && (
-              <div style={{ padding: '4px 8px', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.22)' }}>
-                distance: {aimedStarData.distance.toFixed(2)}
-              </div>
-            )}
-          </div>
-        )}
-
         {showPosition && (
           <div
             style={{
               position: 'absolute',
               bottom: 20,
               right: 20,
-              width: 190,
-              color: 'white',
+              width: positionPanelMapSize,
+              height: positionPanelMapSize,
               pointerEvents: 'none',
-              ...CONFIG.PREVIEW,
-              overflow: 'hidden',
+              display: 'grid',
+              placeItems: 'center',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: 8 }}>
-              <div>
-                <div>X: {formatCoord(telemetry.position.x)}</div>
-                <div>Y: {formatCoord(telemetry.position.y)}</div>
-                <div>Z: {formatCoord(telemetry.position.z)}</div>
-              </div>
-            </div>
-            <SpacePositionMap position={telemetry.position} velocity={telemetry.velocity} size={170} />
+            <SpacePositionMap
+              position={telemetry.position}
+              velocity={telemetry.velocity}
+              size={positionPanelMapSize}
+            />
           </div>
         )}
 
-        {showCompass && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 20,
-              left: 20,
-              width: 170,
-              pointerEvents: 'none',
-              color: '#d8f6ff',
-              fontSize: 11,
-              lineHeight: 1.4,
-              zIndex: 5,
-            }}
-          >
-            <div>HDG {telemetry.headingDeg.toFixed(1)} deg</div>
-            <div>PIT {telemetry.pitchDeg.toFixed(1)} deg</div>
-          </div>
-        )}
       </div>
 
       <button
@@ -706,16 +642,6 @@ export default function SpacePage({
               disabled={!showHud}
             />
             Throttle bar
-          </label>
-          <label style={{ display: 'block', marginBottom: 6 }}>
-            <input
-              type="checkbox"
-              checked={perf.hudRangeReadout}
-              onChange={(e) => updatePerf({ hudRangeReadout: e.target.checked })}
-              style={{ marginRight: 6 }}
-              disabled={!showHud}
-            />
-            Range readout
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input

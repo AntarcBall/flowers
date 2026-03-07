@@ -15,6 +15,7 @@ import {
 } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
 import { Html } from '@react-three/drei';
+import { FlowerPreview } from './FlowerPreview';
 import {
   DEFAULT_SPACE_PERFORMANCE_SETTINGS,
   type SpacePerformanceSettings,
@@ -64,6 +65,7 @@ type SpaceStar = {
 };
 
 type StarEmbeddingParams = ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+type AimEmbeddingPalette = { value: number; color: string };
 
 const buildStarEmbedding = (params: StarEmbeddingParams, position: Vector3, color: string) => {
   const normalizeParam = (key: string, value: number) => {
@@ -137,6 +139,18 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 const isSpaceKey = (event: KeyboardEvent) =>
   event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar';
+const buildEmbeddingBars = (embedding: number[] = []): AimEmbeddingPalette[] =>
+  embedding.map((value, index, source) => {
+    const sample = Number.isFinite(value) ? value : 0.5;
+    const normalized = clamp01(sample);
+    const hue = 110 + (index / Math.max(1, source.length)) * 20;
+    const saturation = 28 + normalized * 60;
+    const lightness = 14 + normalized * 56;
+    return {
+      value: normalized,
+      color: `hsl(${hue}, ${saturation.toFixed(1)}%, ${lightness.toFixed(1)}%)`,
+    };
+  });
 
 const BACKGROUND_STAR_COUNT = 1700;
 const BACKGROUND_STAR_RADIUS_MIN = 900;
@@ -148,8 +162,11 @@ const CONE_RADIUS = Math.tan(CONFIG.CONE_ANGLE_THRESHOLD * 1.2) * CONE_HEIGHT;
 const LABEL_REVEAL_MS = 640;
 const PLANT_HOLD_DURATION_MS = 900;
 const GRID_PLANE_SIZE = 2000;
+const CROSSHAIR_AIM_VIEWPORT_RATIO = 0.09;
+const CROSSHAIR_AIM_MIN_PX = 48;
 
-const LAUNCH_GUIDE_OFFSET = new Vector3(0, 0.05, -1.62);
+// Start the guide from the ship nose, not the rear engine ring.
+const LAUNCH_GUIDE_OFFSET = new Vector3(0, 0.08, 1.52);
 
 function insertCandidate(
   candidates: AimCandidate[],
@@ -210,7 +227,6 @@ export const SpaceScene = ({
   const labelConeScale = Math.max(0.55, Math.min(1.35, settings.labelConeScale || 0.9));
   const labelConeAngle = CONFIG.CONE_ANGLE_THRESHOLD * labelConeScale;
   const labelConeCos = Math.cos(labelConeAngle);
-  const targetConeCos = Math.cos(labelConeAngle * 0.83);
   const labelConeLength = LABEL_CONE_LENGTH_BASE * labelConeScale;
   const starSegments = Math.max(4, Math.min(16, Math.round(settings.starGeometrySegments || 8)));
   const starScale = Math.max(0.2, Math.min(3, settings.starScale || 1));
@@ -309,7 +325,7 @@ export const SpaceScene = ({
   const inputRef = useInput();
   const shipRef = useRef<Group>(null);
   const backgroundStarRef = useRef<any>(null);
-  const { camera } = useThree();
+  const { camera, size } = useThree();
 
   const [aimedStarId, setAimedStarId] = useState<number | null>(null);
   const aimedStarRef = useRef<number | null>(null);
@@ -433,14 +449,22 @@ export const SpaceScene = ({
 
     const candidates: AimCandidate[] = labelsEnabled ? [] : [];
     let bestTargetId: number | null = null;
-    let bestDist = Infinity;
     let bestTargetDist = Infinity;
+    let bestTargetScreenDistSq = Infinity;
     let nearestId: number | null = null;
     let nearestDist = Infinity;
     const toStar = new Vector3();
+    const projectedStar = new Vector3();
     const visibleIds: number[] = [];
     const fullStars = starsRef.current;
     const sampleStep = aimSampleStep;
+    const crosshairAimMaxPx = Math.max(
+      CROSSHAIR_AIM_MIN_PX,
+      Math.min(size.width, size.height) * CROSSHAIR_AIM_VIEWPORT_RATIO,
+    );
+    const crosshairAimMaxDistSq = crosshairAimMaxPx * crosshairAimMaxPx;
+    const halfWidth = size.width * 0.5;
+    const halfHeight = size.height * 0.5;
 
     for (let i = 0; i < fullStars.length; i += 1) {
       const star = fullStars[i];
@@ -458,13 +482,34 @@ export const SpaceScene = ({
       const dir = toStar.normalize();
       const dot = forward.dot(dir);
 
-      if (dot > targetConeCos && dist < bestDist) {
-        bestDist = dist;
-        bestTargetId = star.id;
-        bestTargetDist = dist;
-      }
       if ((i % sampleStep) === 0 && dot > labelConeCos && dist <= labelConeLength) {
         insertCandidate(candidates, { id: star.id, dot, dist }, maxVisibleLabels);
+      }
+
+      projectedStar.copy(star.position).project(camera as PerspectiveCamera);
+      if (
+        !Number.isFinite(projectedStar.x) ||
+        !Number.isFinite(projectedStar.y) ||
+        projectedStar.z < -1 ||
+        projectedStar.z > 1
+      ) {
+        continue;
+      }
+
+      const screenDx = projectedStar.x * halfWidth;
+      const screenDy = projectedStar.y * halfHeight;
+      const screenDistSq = screenDx * screenDx + screenDy * screenDy;
+      if (screenDistSq > crosshairAimMaxDistSq) {
+        continue;
+      }
+
+      if (
+        screenDistSq < bestTargetScreenDistSq ||
+        (screenDistSq === bestTargetScreenDistSq && dist < bestTargetDist)
+      ) {
+        bestTargetScreenDistSq = screenDistSq;
+        bestTargetId = star.id;
+        bestTargetDist = dist;
       }
     }
 
@@ -479,11 +524,6 @@ export const SpaceScene = ({
     if (labelsEnabled && candidates.length === 0 && nearestId !== null) {
       insertCandidate(candidates, { id: nearestId, dot: 1, dist: nearestDist }, maxVisibleLabels);
     }
-    if (bestTargetId === null && nearestId !== null) {
-      bestTargetId = nearestId;
-      bestTargetDist = nearestDist;
-    }
-
     for (const candidate of candidates) {
       visibleIds.push(candidate.id);
     }
@@ -519,6 +559,10 @@ export const SpaceScene = ({
         labelVisibleTargetCount: visibleIds.length,
         aimedStarId: bestTargetId,
         bestTargetDist: Number.isFinite(bestTargetDist) ? Math.round(bestTargetDist * 1000) / 1000 : null,
+        bestTargetScreenDistPx: Number.isFinite(bestTargetScreenDistSq)
+          ? Math.round(Math.sqrt(bestTargetScreenDistSq) * 10) / 10
+          : null,
+        aimThresholdPx: Math.round(crosshairAimMaxPx),
         candidatesReady: candidates.length,
       });
       debugAimLogAtRef.current = nowMs();
@@ -527,8 +571,8 @@ export const SpaceScene = ({
     const currentAimedId = bestTargetId;
 
     if (currentAimedId !== aimedStarRef.current) {
-      setAimedStarId(bestTargetId);
-      aimedStarRef.current = bestTargetId;
+      setAimedStarId(currentAimedId);
+      aimedStarRef.current = currentAimedId;
     }
 
     if (spaceHoldKeyRef.current && launchGuideTargetRef.current === null && currentAimedId !== null) {
@@ -543,7 +587,7 @@ export const SpaceScene = ({
 
     if (currentAimedId !== null) {
       if (aimedStarRef.current === currentAimedId) {
-        const star = starsByIdRef.current.get(bestTargetId);
+        const star = starsByIdRef.current.get(currentAimedId);
         if (star) {
           const offset = star.position.clone().sub(controller.position);
           const headingOffsetDeg = toHeadingDeg(offset);
@@ -913,6 +957,7 @@ export const SpaceScene = ({
     }, [labelTick, aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
 
   const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
+  const aimedEmbeddingBars = aimedStar ? buildEmbeddingBars(aimedStar.embedding) : [];
   const launchGuideStart = shipRef.current
     ? shipRef.current.localToWorld(LAUNCH_GUIDE_OFFSET.clone())
     : controller.position.clone();
@@ -1079,25 +1124,91 @@ export const SpaceScene = ({
 
       {showTargetMarker && aimedStar && (
         <Html
-          center
-          distanceFactor={25}
+          distanceFactor={16}
           zIndexRange={[100, 2000]}
           occlude={false}
           position={aimedStar.position.toArray()}
         >
-          <div
-            style={{
-              width: 700,
-              height: 700,
-              transform: 'translate(-50%, -50%)',
-              borderRadius: '50%',
-              border: '2px solid rgba(255, 255, 255, 0.42)',
-              background:
-                'radial-gradient(circle, rgba(255,255,255,0.45) 0%, rgba(140, 220, 255, 0.18) 52%, rgba(140, 220, 255, 0) 74%)',
-              boxShadow: '0 0 26px rgba(140, 220, 255, 0.28)',
-              pointerEvents: 'none',
-            }}
-          />
+          <div style={{ position: 'relative', width: 0, height: 0, pointerEvents: 'none' }}>
+            <div
+              style={{
+                position: 'absolute',
+                left: -24,
+                top: -24,
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                border: '1.5px solid rgba(255, 255, 255, 0.38)',
+                background:
+                  'radial-gradient(circle, rgba(255,255,255,0.34) 0%, rgba(140, 220, 255, 0.16) 54%, rgba(140, 220, 255, 0) 78%)',
+                boxShadow: '0 0 18px rgba(140, 220, 255, 0.24)',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                right: 26,
+                bottom: 24,
+                width: 176,
+                height: 176,
+                padding: 10,
+                boxSizing: 'border-box',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 14,
+                border: '1px solid rgba(145, 223, 255, 0.42)',
+                background: 'rgba(5, 16, 26, 0.92)',
+                boxShadow: '0 12px 28px rgba(0, 0, 0, 0.42), 0 0 18px rgba(109, 206, 255, 0.14)',
+                backdropFilter: 'blur(8px)',
+                color: '#eef9ff',
+                transform: 'scale(10)',
+                transformOrigin: 'bottom right',
+              }}
+            >
+              {aimedEmbeddingBars.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    height: 14,
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${Math.max(1, aimedEmbeddingBars.length)}, minmax(0, 1fr))`,
+                    gap: 0,
+                    overflow: 'hidden',
+                    borderRadius: '14px 14px 0 0',
+                  }}
+                >
+                  {aimedEmbeddingBars.map((segment, segmentIndex) => (
+                    <div
+                      key={`aim-embedding-${aimedStar.id ?? 'none'}-${segmentIndex}`}
+                      style={{
+                        height: '100%',
+                        background: segment.color,
+                        opacity: 0.55 + segment.value * 0.45,
+                        boxShadow: `inset 0 0 0 1px rgba(255,255,255,${0.16 + segment.value * 0.32})`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  width: '100%',
+                  height: '100%',
+                  paddingTop: aimedEmbeddingBars.length > 0 ? 14 : 0,
+                  boxSizing: 'border-box',
+                }}
+              >
+                <FlowerPreview params={aimedStar.params} color={aimedStar.color} size={156} />
+              </div>
+            </div>
+          </div>
         </Html>
       )}
 

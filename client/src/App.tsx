@@ -15,6 +15,7 @@ const DEFAULT_SEED_LIMIT = 3;
 const AUTO_END_RESET_MS = 20_000;
 const VERSE_DURATION_MS = 2100;
 const CONTROL_GUIDE_DURATION_MS = 7_500;
+const INACTIVITY_RESET_MS = 30_000;
 
 const PROLOGUE_SHORT = [
   '서가의 그늘에서, 우주는 시작된다.',
@@ -80,13 +81,14 @@ export default function App() {
   const verseTimerRef = useRef<number | null>(null);
   const guideTimerRef = useRef<number | null>(null);
   const endResetTimerRef = useRef<number | null>(null);
+  const inactivityTimerRef = useRef<number | null>(null);
 
-  const stopVerse = () => {
+  const stopVerse = useCallback(() => {
     if (verseTimerRef.current !== null) {
       window.clearTimeout(verseTimerRef.current);
       verseTimerRef.current = null;
     }
-  };
+  }, []);
 
   const publishVerse = useCallback((text: string, durationMs = VERSE_DURATION_MS) => {
     stopVerse();
@@ -95,21 +97,28 @@ export default function App() {
       setVerse(null);
       verseTimerRef.current = null;
     }, durationMs);
-  }, []);
+  }, [stopVerse]);
 
-  const clearGuideTimer = () => {
+  const clearGuideTimer = useCallback(() => {
     if (guideTimerRef.current !== null) {
       window.clearTimeout(guideTimerRef.current);
       guideTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const clearResetTimer = () => {
+  const clearResetTimer = useCallback(() => {
     if (endResetTimerRef.current !== null) {
       window.clearTimeout(endResetTimerRef.current);
       endResetTimerRef.current = null;
     }
-  };
+  }, []);
+
+  const clearInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current !== null) {
+      window.clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  }, []);
 
   const beginControlGuide = useCallback(() => {
     clearGuideTimer();
@@ -118,7 +127,7 @@ export default function App() {
       setShowControlGuide(false);
       guideTimerRef.current = null;
     }, CONTROL_GUIDE_DURATION_MS);
-  }, []);
+  }, [clearGuideTimer]);
 
   const resetForNewVoyage = useCallback(() => {
     setSeedState({ used: 0, remaining: seedLimit, total: seedLimit });
@@ -150,15 +159,27 @@ export default function App() {
       beginControlGuide();
       clearResetTimer();
     }, AUTO_END_RESET_MS);
-  }, [beginControlGuide, clearGuideTimer, publishVerse, resetForNewVoyage]);
+  }, [beginControlGuide, clearGuideTimer, clearResetTimer, publishVerse, resetForNewVoyage]);
+
+  const returnToPrologue = useCallback(() => {
+    clearInactivityTimer();
+    clearGuideTimer();
+    clearResetTimer();
+    stopVerse();
+    setVerse(null);
+    setShowControlGuide(false);
+    setPhase('prologue');
+    resetForNewVoyage();
+  }, [clearGuideTimer, clearInactivityTimer, clearResetTimer, resetForNewVoyage, stopVerse]);
 
   useEffect(() => {
     return () => {
       stopVerse();
       clearGuideTimer();
       clearResetTimer();
+      clearInactivityTimer();
     };
-  }, []);
+  }, [clearGuideTimer, clearInactivityTimer, clearResetTimer, stopVerse]);
 
   useEffect(() => {
     if (phase !== 'ending') {
@@ -169,7 +190,44 @@ export default function App() {
     return () => {
       clearResetTimer();
     };
-  }, [phase]);
+  }, [clearResetTimer, phase]);
+
+  useEffect(() => {
+    if (phase !== 'flight') {
+      clearInactivityTimer();
+      return;
+    }
+
+    const armInactivityTimer = () => {
+      clearInactivityTimer();
+      inactivityTimerRef.current = window.setTimeout(() => {
+        returnToPrologue();
+      }, INACTIVITY_RESET_MS);
+    };
+
+    const handleActivity = () => {
+      armInactivityTimer();
+    };
+
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('keyup', handleActivity);
+    window.addEventListener('pointerdown', handleActivity);
+    window.addEventListener('pointermove', handleActivity);
+    window.addEventListener('wheel', handleActivity, { passive: true });
+    window.addEventListener('touchstart', handleActivity, { passive: true });
+
+    armInactivityTimer();
+
+    return () => {
+      clearInactivityTimer();
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('keyup', handleActivity);
+      window.removeEventListener('pointerdown', handleActivity);
+      window.removeEventListener('pointermove', handleActivity);
+      window.removeEventListener('wheel', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+    };
+  }, [clearInactivityTimer, phase, returnToPrologue]);
 
   const canPlant = () => phase === 'flight' && seedState.remaining > 0;
 
