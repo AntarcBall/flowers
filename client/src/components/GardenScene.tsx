@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrthographicCamera, Html } from '@react-three/drei';
 import { GardenManager } from '../modules/GardenManager';
-import { OrthographicCamera as ThreeOrthographicCamera, PointLight, DoubleSide } from 'three';
+import { OrthographicCamera as ThreeOrthographicCamera, AmbientLight, PointLight, DoubleSide } from 'three';
 import { CONFIG } from '../config';
 import { Flower } from './Flower';
 import type { FlowerData } from '../modules/PersistenceService';
@@ -23,7 +23,7 @@ export const GardenScene = ({
   const { camera } = useThree();
   const [flowers, setFlowers] = useState<FlowerData[]>(manager.flowers);
   const [lifeClock, setLifeClock] = useState(() => Date.now());
-  const ambientPulseRef = useRef<PointLight>(null);
+  const ambientPulseRef = useRef<AmbientLight>(null);
   const rimPulseRef = useRef<PointLight>(null);
   const edgePulseRef = useRef<PointLight>(null);
   const lastLifeTickRef = useRef(0);

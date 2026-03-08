@@ -101,6 +101,54 @@ body {
   max-width: 520px;
 }
 
+.prologue-language-panel {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.prologue-language-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: rgba(241, 248, 255, 0.94);
+}
+
+.prologue-language-options {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.prologue-language-option {
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(170, 212, 245, 0.18);
+  background: rgba(9, 18, 36, 0.74);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.prologue-language-option.is-selected {
+  border-color: rgba(255, 226, 138, 0.8);
+  box-shadow: 0 0 18px rgba(255, 226, 138, 0.18);
+  transform: translateY(-1px);
+}
+
+.prologue-language-hint {
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 226, 138, 0.88);
+}
+
+.prologue-language-label {
+  margin-top: 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(245, 250, 255, 0.96);
+}
+
 .prologue-kbd-title {
   color: rgba(255, 226, 138, 0.96);
   font-size: 0.82rem;

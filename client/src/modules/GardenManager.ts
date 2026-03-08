@@ -117,7 +117,10 @@ export class GardenManager {
     let removed = 0;
 
     for (const flower of flowers) {
-      const plantedAt = Number.isFinite(flower.plantedAt) ? flower.plantedAt : flower.timestamp;
+      const plantedAt =
+        (typeof flower.plantedAt === 'number' && Number.isFinite(flower.plantedAt)
+          ? flower.plantedAt
+          : flower.timestamp) ?? now;
       const ageMs = Math.max(0, now - plantedAt);
       const lifeSpanMs = this.resolveLifeSpanMs(flower);
       const removalAt = lifeSpanMs + FLOWER_AGING_STAGE_MS * FLOWER_AGING_STAGE_COUNT;
@@ -329,14 +332,8 @@ export class GardenManager {
       ) {
         const existingLabelX = flower.x + flower.labelOffsetX;
         const existingLabelY = flower.y + flower.labelOffsetY;
-        const existingLabelRadius = this.resolveLabelRadius(flower.word || '');
         const requiredSq =
-          Math.pow(
-            placementRadius +
-              (flower.labelRadius ?? existingLabelRadius) +
-              LABEL_FLAT_GAP * LABEL_COLLISION_GAIN,
-            2,
-          );
+          Math.pow(placementRadius + flower.labelRadius + LABEL_FLAT_GAP * LABEL_COLLISION_GAIN, 2);
         if (this.distanceSq(centerX, centerY, existingLabelX, existingLabelY) < requiredSq) {
           return false;
         }
@@ -423,7 +420,6 @@ export class GardenManager {
         ) {
           const existingLabelX = flower.x + flower.labelOffsetX;
           const existingLabelY = flower.y + flower.labelOffsetY;
-          const existingLabelRadius = this.resolveLabelRadius(flower.word || '');
           const requiredSq = Math.pow(
             labelRadius + flower.labelRadius + LABEL_FLAT_GAP * LABEL_COLLISION_GAIN,
             2,
@@ -528,7 +524,10 @@ export class GardenManager {
   }
 
   getFlowerState(flower: FlowerData, now = Date.now()) {
-    const plantedAt = Number.isFinite(flower.plantedAt) ? flower.plantedAt : flower.timestamp;
+    const plantedAt =
+      (typeof flower.plantedAt === 'number' && Number.isFinite(flower.plantedAt)
+        ? flower.plantedAt
+        : flower.timestamp) ?? now;
     const ageMs = Math.max(0, now - plantedAt);
     const lifeSpanMs = this.resolveLifeSpanMs(flower);
     const witheringMs = this.resolveWitheringMs(flower, lifeSpanMs);

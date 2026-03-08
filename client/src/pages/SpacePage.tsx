@@ -1,13 +1,15 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type { CSSProperties } from 'react';
 import { SpacePositionMap } from '../components/SpacePositionMap';
+import { localizeSpaceWord } from '../content/spaceCopy';
 import {
   SpaceScene,
   type SpacePlantHoldEvent,
   type SpacePlantHoldState,
 } from '../components/SpaceScene';
 import { CONFIG } from '../config';
+import { SPACE_COPY, type SpaceLocale } from '../content/spaceCopy';
 import { PersistenceService } from '../modules/PersistenceService';
 import type { FlowerData } from '../modules/PersistenceService';
 import { GardenManager } from '../modules/GardenManager';
@@ -41,6 +43,7 @@ type TelemetryState = {
 };
 
 type SpacePageProps = {
+  locale: SpaceLocale;
   initialSeedLimit?: number;
   onSeedStateChange?: (state: SeedState) => void;
   onSeedCommit?: (entry: {
@@ -76,6 +79,7 @@ const makeFlowerId = () =>
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export default function SpacePage({
+  locale,
   initialSeedLimit,
   onSeedStateChange,
   onSeedCommit,
@@ -86,6 +90,7 @@ export default function SpacePage({
   canPlant,
 }: SpacePageProps) {
   const seedLimit = normalizeSeedLimit(initialSeedLimit);
+  const copy = SPACE_COPY[locale];
 
   const debugMode = false;
   const [telemetry, setTelemetry] = useState<TelemetryState>({
@@ -303,6 +308,7 @@ export default function SpacePage({
         <SpaceScene
           onSelectStar={handleSelectStar}
           debugMode={debugMode}
+          locale={locale}
           onAimChange={handleAimChange}
           onTelemetryChange={handleTelemetryChange}
           performance={perf}
@@ -329,7 +335,7 @@ export default function SpacePage({
               fontSize: 12,
             }}
           >
-            심을 수 있는 여지가 없습니다.
+            {copy.flight.seedBlocked}
           </div>
         )}
 
@@ -436,7 +442,7 @@ export default function SpacePage({
                 />
               </svg>
             </div>
-            <div style={{ fontSize: 12 }}>plant {Math.round(holdState.progress * 100)}%</div>
+            <div style={{ fontSize: 12 }}>{copy.flight.holdProgress(Math.round(holdState.progress * 100))}</div>
           </div>
         )}
 
@@ -484,7 +490,7 @@ export default function SpacePage({
                   <div style={{ position: 'absolute', top: 6, left: 10, fontSize: 11, color: '#ddd' }}>180</div>
                   <div style={{ position: 'absolute', top: 6, right: 10, fontSize: 11, color: '#ddd' }}>0</div>
                 </div>
-                <div style={{ marginTop: 4, textAlign: 'center', fontSize: 12, color: '#ddd' }}>Speedometer {speedReadoutDeg}</div>
+                <div style={{ marginTop: 4, textAlign: 'center', fontSize: 12, color: '#ddd' }}>{copy.flight.speedometer(speedReadoutDeg)}</div>
                 <div style={{ textAlign: 'center', fontSize: 12, color: '#9bd7ff' }}>
                   {telemetry.speed.toFixed(2)} / {Math.round(CONFIG.MAX_SPEED)}
                 </div>
@@ -527,7 +533,7 @@ export default function SpacePage({
                     boxShadow: '0 0 12px rgba(0,0,0,0.35)',
                   }}
                 >
-                  planted: {toast.word}
+                  {copy.flight.plantedToast(localizeSpaceWord(locale, toast.word))}
                 </div>
               ))}
             </div>
@@ -576,7 +582,7 @@ export default function SpacePage({
             overflow: 'auto',
           }}
         >
-          <div style={{ marginBottom: 10, fontWeight: 700 }}>Performance Tuning</div>
+          <div style={{ marginBottom: 10, fontWeight: 700 }}>{copy.perf.title}</div>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
               type="checkbox"
@@ -584,7 +590,7 @@ export default function SpacePage({
               onChange={(e) => updatePerf({ showHud: e.target.checked })}
               style={{ marginRight: 6 }}
             />
-            Show HUD
+            {copy.perf.showHud}
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -594,7 +600,7 @@ export default function SpacePage({
               style={{ marginRight: 6 }}
               disabled={!showHud}
             />
-            Position panel
+            {copy.perf.positionPanel}
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -604,7 +610,7 @@ export default function SpacePage({
               style={{ marginRight: 6 }}
               disabled={!showHud}
             />
-            Compass
+            {copy.perf.compass}
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -614,7 +620,7 @@ export default function SpacePage({
               style={{ marginRight: 6 }}
               disabled={!showHud}
             />
-            Target panel
+            {copy.perf.targetPanel}
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -624,7 +630,7 @@ export default function SpacePage({
               style={{ marginRight: 6 }}
               disabled={!showHud}
             />
-            Throttle bar
+            {copy.perf.throttleBar}
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -634,7 +640,7 @@ export default function SpacePage({
               style={{ marginRight: 6 }}
               disabled={!showHud}
             />
-            Crosshair
+            {copy.perf.crosshair}
           </label>
           <label style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -644,10 +650,10 @@ export default function SpacePage({
               style={{ marginRight: 6 }}
               disabled={!showHud}
             />
-            Speedometer
+            {copy.perf.speedometer}
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            HUD scale ({perf.hudScale.toFixed(2)})
+            {copy.perf.hudScale(perf.hudScale)}
             <input
               type="range"
               min={0.6}
@@ -659,7 +665,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            HUD opacity ({perf.hudOpacity.toFixed(2)})
+            {copy.perf.hudOpacity(perf.hudOpacity)}
             <input
               type="range"
               min={0.35}
@@ -671,7 +677,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            DPR min ({perf.dprMin.toFixed(2)})
+            {copy.perf.dprMin(perf.dprMin)}
             <input
               type="range"
               min={0.5}
@@ -683,7 +689,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            DPR max ({perf.dprMax.toFixed(2)})
+            {copy.perf.dprMax(perf.dprMax)}
             <input
               type="range"
               min={perf.dprMin}
@@ -695,7 +701,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Antialias
+            {copy.perf.antialias}
             <input
               type="checkbox"
               checked={perf.antialias}
@@ -704,7 +710,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Background stars ({Math.round(perf.backgroundStarDensity * 100)}%)
+            {copy.perf.backgroundStars(Math.round(perf.backgroundStarDensity * 100))}
             <input
               type="range"
               min={20}
@@ -716,7 +722,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Background point size ({perf.backgroundPointSize.toFixed(1)})
+            {copy.perf.backgroundPointSize(perf.backgroundPointSize)}
             <input
               type="range"
               min={1}
@@ -728,7 +734,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Star geometry segments ({perf.starGeometrySegments})
+            {copy.perf.starGeometrySegments(perf.starGeometrySegments)}
             <input
               type="range"
               min={4}
@@ -740,7 +746,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Max visible labels ({perf.maxVisibleLabels})
+            {copy.perf.maxVisibleLabels(perf.maxVisibleLabels)}
             <input
               type="range"
               min={0}
@@ -752,7 +758,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Label update interval ({perf.labelUpdateIntervalMs}ms)
+            {copy.perf.labelUpdateInterval(perf.labelUpdateIntervalMs)}
             <input
               type="range"
               min={24}
@@ -764,7 +770,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Label cone scale ({perf.labelConeScale.toFixed(2)})
+            {copy.perf.labelConeScale(perf.labelConeScale)}
             <input
               type="range"
               min={0.55}
@@ -776,7 +782,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            label sample step ({perf.aimSampleStep})
+            {copy.perf.labelSampleStep(perf.aimSampleStep)}
             <input
               type="range"
               min={1}
@@ -788,7 +794,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            label font scale ({perf.labelFontScale.toFixed(2)})
+            {copy.perf.labelFontScale(perf.labelFontScale)}
             <input
               type="range"
               min={0.5}
@@ -800,7 +806,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            label min size ({perf.labelFontMin}px)
+            {copy.perf.labelMinSize(perf.labelFontMin)}
             <input
               type="range"
               min={1}
@@ -812,7 +818,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            target panel min size ({perf.targetPanelMinSize}px)
+            {copy.perf.targetPanelMinSize(perf.targetPanelMinSize)}
             <input
               type="range"
               min={1}
@@ -824,7 +830,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            launch trail ({perf.launchTrailLimit})
+            {copy.perf.launchTrail(perf.launchTrailLimit)}
             <input
               type="range"
               min={0}
@@ -836,7 +842,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            ship quality ({perf.shipQuality.toFixed(2)})
+            {copy.perf.shipQuality(perf.shipQuality)}
             <input
               type="range"
               min={0}
@@ -848,7 +854,7 @@ export default function SpacePage({
             />
           </label>
           <label style={{ display: 'block', marginBottom: 8 }}>
-            Grid density ({perf.gridDensity.toFixed(2)})
+            {copy.perf.gridDensity(perf.gridDensity)}
             <input
               type="range"
               min={0}
@@ -864,7 +870,7 @@ export default function SpacePage({
               onClick={() => setPerf(DEFAULT_SPACE_PERFORMANCE_SETTINGS)}
               style={{ padding: '6px 8px', fontSize: 12 }}
             >
-              Reset
+              {copy.perf.reset}
             </button>
             <button
               onClick={() =>
@@ -897,7 +903,7 @@ export default function SpacePage({
               }
               style={{ padding: '6px 8px', fontSize: 12 }}
             >
-              Low power preset
+              {copy.perf.lowPowerPreset}
             </button>
           </div>
         </div>

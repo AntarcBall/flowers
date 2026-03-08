@@ -10,7 +10,6 @@ import {
   AdditiveBlending,
   Color,
   SphereGeometry,
-  MeshBasicMaterial,
   DoubleSide,
 } from 'three';
 import { SemanticMapper } from '../modules/SemanticMapper';
@@ -23,6 +22,7 @@ import {
   TARGET_PANEL_MIN_MAX,
 } from '../modules/PerformanceSettings';
 import { CONFIG } from '../config';
+import { localizeSpaceWord, type SpaceLocale } from '../content/spaceCopy';
 import { ensureColorPresetLoaded, subscribeToColorPreset } from '../modules/ColorPresetStore';
 
 type Telemetry = {
@@ -67,10 +67,11 @@ type SpaceStar = {
 };
 
 type StarEmbeddingParams = ReturnType<typeof SemanticMapper.mapCoordinatesToParams>;
+type FlowerRangeKey = keyof typeof CONFIG.FLOWER_RANGES;
 type AimEmbeddingPalette = { value: number; color: string };
 
 const buildStarEmbedding = (params: StarEmbeddingParams, position: Vector3, color: string) => {
-  const normalizeParam = (key: string, value: number) => {
+  const normalizeParam = (key: FlowerRangeKey, value: number) => {
     const range = CONFIG.FLOWER_RANGES[key];
     if (!range) return 0.5;
     if (!Number.isFinite(value)) return 0.5;
@@ -95,7 +96,10 @@ const buildStarEmbedding = (params: StarEmbeddingParams, position: Vector3, colo
   })();
 
   const normalizedParams = Object.entries(params)
-    .filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+    .filter((entry): entry is [FlowerRangeKey, number] => {
+      const [key, value] = entry;
+      return key in CONFIG.FLOWER_RANGES && typeof value === 'number' && Number.isFinite(value);
+    })
     .map(([key, value]) => normalizeParam(key, value));
 
   return [...normalizedPos, ...normalizedParams, ...parsedColor];
@@ -205,6 +209,7 @@ function createStarLookup(list: SpaceStar[]) {
 export const SpaceScene = ({
   onSelectStar,
   debugMode,
+  locale,
   onAimChange,
   onTelemetryChange,
   performance,
@@ -214,6 +219,7 @@ export const SpaceScene = ({
 }: {
   onSelectStar: (data: any) => void;
   debugMode: boolean;
+  locale: SpaceLocale;
   onAimChange: (data: AimPayload | null) => void;
   onTelemetryChange: (data: Telemetry) => void;
   performance?: SpacePerformanceSettings;
@@ -428,7 +434,7 @@ export const SpaceScene = ({
             };
           }
         );
-        const maxDist = loadedStars.reduce((result, star) => Math.max(result, star.position.length()), 0);
+        const maxDist = loadedStars.reduce((result: number, star: SpaceStar) => Math.max(result, star.position.length()), 0);
         maxTravelRadiusRef.current = maxDist === 0 ? Infinity : maxDist * 1.4;
         setStars(loadedStars);
         if (debugEnabled) {
@@ -983,14 +989,14 @@ export const SpaceScene = ({
                 boxShadow: '0 0 10px rgba(136, 205, 255, 0.45)',
               }}
             >
-              {star.word}
+              {localizeSpaceWord(locale, star.word)}
             </div>
         </Html>
       );
       })
       .filter((label) => label !== null);
     return labels;
-    }, [labelTick, aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled]);
+    }, [labelTick, aimedStarId, labelVisibleStarIds, labelFontSize, labelOffsetX, labelOffsetY, labelsEnabled, locale]);
 
   const aimedStar = aimedStarId === null ? null : starsByIdRef.current.get(aimedStarId);
   const aimedEmbeddingBars = aimedStar ? buildEmbeddingBars(aimedStar.embedding) : [];

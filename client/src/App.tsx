@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SpacePage from './pages/SpacePage';
 import { CONFIG } from './config';
+import { SPACE_COPY, type SpaceLocale } from './content/spaceCopy';
 import type { StarSelectionData } from './types';
 import './App.css';
 
@@ -24,24 +25,6 @@ const RESTART_CONTROL_KEY_LABELS: Record<RestartControlKey, 'W' | 'A' | 'S' | 'D
   KeyD: 'D',
 };
 
-const PROLOGUE_SHORT = [
-  '서가의 그늘에서, 우주는 시작된다.',
-  '단어를 조준해 심으면 Garden 창에 꽃으로 피어납니다.',
-  'WASD로 방향을 바꾸고, Space를 오래 눌러 심어보세요.',
-  '오늘의 항해에는 심기 수 제한이 있습니다.',
-] as const;
-
-const TRIGGERS = {
-  startFlight: '관성에 몸을 맡기세요.',
-  firstAim: '당신이 바라본 것만, 이름을 얻는다.',
-  firstLod: '가까워지는 일은, 읽는 일이다.',
-  plantStart: '공백이 자리를 만들고, 의미가 피어납니다.',
-  plantComplete: '전사(全射): 단어가 형태를 얻었습니다.',
-  remainingOne: '남은 봄은 하나.',
-  end: '당신의 별자리가 기록되었습니다.',
-  blocked: '더 이상 심을 수 없습니다.',
-} as const;
-
 const parseSeedLimit = () => {
   if (typeof window === 'undefined') return DEFAULT_SEED_LIMIT;
   const params = new URLSearchParams(window.location.search);
@@ -52,6 +35,10 @@ const parseSeedLimit = () => {
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const isRestartControlKey = (code: string): code is RestartControlKey => code in RESTART_CONTROL_KEY_LABELS;
+const isSpaceKey = (event: KeyboardEvent) =>
+  event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar';
+const localeFromControlKey = (code: RestartControlKey): SpaceLocale =>
+  code === 'KeyW' || code === 'KeyA' ? 'ko' : 'en';
 
 const PROLOGUE_KEYCAP_LAYOUT: Array<{ code: RestartControlKey; label: 'W' | 'A' | 'S' | 'D'; x: number; y: number }> = [
   { code: 'KeyW', label: 'W', x: 88, y: 0 },
@@ -63,12 +50,14 @@ const PROLOGUE_KEYCAP_LAYOUT: Array<{ code: RestartControlKey; label: 'W' | 'A' 
 function PrologueWasdGlyph({
   activeKey,
   launching,
+  ariaLabel,
 }: {
   activeKey: RestartControlKey | null;
   launching: boolean;
+  ariaLabel: string;
 }) {
   return (
-    <svg viewBox="0 0 264 176" className="prologue-wasd-svg" role="img" aria-label="WASD launch controls">
+    <svg viewBox="0 0 264 176" className="prologue-wasd-svg" role="img" aria-label={ariaLabel}>
       <defs>
         <filter id="prologueKeyGlow" x="-35%" y="-35%" width="170%" height="170%">
           <feGaussianBlur stdDeviation="7" result="blur" />
@@ -131,6 +120,8 @@ function PrologueWasdGlyph({
 
 export default function App() {
   const [phase, setPhase] = useState<AppPhase>('prologue');
+  const [locale, setLocale] = useState<SpaceLocale>('ko');
+  const [prologueLocale, setPrologueLocale] = useState<SpaceLocale>('ko');
   const [seedLimit] = useState(() => parseSeedLimit());
   const [seedState, setSeedState] = useState<SeedState>({
     used: 0,
@@ -144,7 +135,7 @@ export default function App() {
   const [hasFirstLod, setHasFirstLod] = useState(false);
   const [hasFirstAim, setHasFirstAim] = useState(false);
   const [hasRemainingOne, setHasRemainingOne] = useState(false);
-  const [prologueLaunchKey, setPrologueLaunchKey] = useState<RestartControlKey | null>(null);
+  const [prologueSelectionKey, setPrologueSelectionKey] = useState<RestartControlKey | null>(null);
   const [isPrologueLaunching, setIsPrologueLaunching] = useState(false);
   const [endingRestartInput, setEndingRestartInput] = useState<{ key: RestartControlKey | null; count: number }>({
     key: null,
@@ -161,6 +152,9 @@ export default function App() {
     count: 0,
   });
 
+  const copy = SPACE_COPY[locale];
+  const prologueCopy = SPACE_COPY[prologueLocale];
+
   const stopVerse = useCallback(() => {
     if (verseTimerRef.current !== null) {
       window.clearTimeout(verseTimerRef.current);
@@ -168,14 +162,17 @@ export default function App() {
     }
   }, []);
 
-  const publishVerse = useCallback((text: string, durationMs = VERSE_DURATION_MS) => {
-    stopVerse();
-    setVerse({ id: Date.now(), text });
-    verseTimerRef.current = window.setTimeout(() => {
-      setVerse(null);
-      verseTimerRef.current = null;
-    }, durationMs);
-  }, [stopVerse]);
+  const publishVerse = useCallback(
+    (text: string, durationMs = VERSE_DURATION_MS) => {
+      stopVerse();
+      setVerse({ id: Date.now(), text });
+      verseTimerRef.current = window.setTimeout(() => {
+        setVerse(null);
+        verseTimerRef.current = null;
+      }, durationMs);
+    },
+    [stopVerse],
+  );
 
   const clearGuideTimer = useCallback(() => {
     if (guideTimerRef.current !== null) {
@@ -207,7 +204,7 @@ export default function App() {
 
   const resetPrologueLaunch = useCallback(() => {
     clearPrologueLaunchTimer();
-    setPrologueLaunchKey(null);
+    setPrologueSelectionKey(null);
     setIsPrologueLaunching(false);
   }, [clearPrologueLaunchTimer]);
 
@@ -234,31 +231,36 @@ export default function App() {
     setVoyageEpoch((current) => current + 1);
   }, [seedLimit]);
 
-  const startFlight = useCallback(() => {
-    resetPrologueLaunch();
-    syncEndingRestartInput({ key: null, count: 0 });
-    setPhase('flight');
-    resetForNewVoyage();
-    setSeedState({ used: 0, remaining: seedLimit, total: seedLimit });
-    publishVerse(TRIGGERS.startFlight);
-    beginControlGuide();
-  }, [beginControlGuide, publishVerse, resetForNewVoyage, resetPrologueLaunch, seedLimit, syncEndingRestartInput]);
+  const startFlight = useCallback(
+    (nextLocale: SpaceLocale = locale) => {
+      setLocale(nextLocale);
+      setPrologueLocale(nextLocale);
+      resetPrologueLaunch();
+      syncEndingRestartInput({ key: null, count: 0 });
+      setPhase('flight');
+      resetForNewVoyage();
+      setSeedState({ used: 0, remaining: seedLimit, total: seedLimit });
+      publishVerse(SPACE_COPY[nextLocale].triggers.startFlight);
+      beginControlGuide();
+    },
+    [beginControlGuide, locale, publishVerse, resetForNewVoyage, resetPrologueLaunch, seedLimit, syncEndingRestartInput],
+  );
 
   const finishVoyage = useCallback(() => {
     syncEndingRestartInput({ key: null, count: 0 });
     setPhase('ending');
     clearGuideTimer();
     setShowControlGuide(false);
-    publishVerse(TRIGGERS.end);
+    publishVerse(SPACE_COPY[locale].triggers.end);
     clearResetTimer();
     endResetTimerRef.current = window.setTimeout(() => {
       setPhase('flight');
       resetForNewVoyage();
-      publishVerse(TRIGGERS.startFlight);
+      publishVerse(SPACE_COPY[locale].triggers.startFlight);
       beginControlGuide();
       clearResetTimer();
     }, AUTO_END_RESET_MS);
-  }, [beginControlGuide, clearGuideTimer, clearResetTimer, publishVerse, resetForNewVoyage, syncEndingRestartInput]);
+  }, [beginControlGuide, clearGuideTimer, clearResetTimer, locale, publishVerse, resetForNewVoyage, syncEndingRestartInput]);
 
   const returnToPrologue = useCallback(() => {
     clearInactivityTimer();
@@ -270,11 +272,13 @@ export default function App() {
     setVerse(null);
     setShowControlGuide(false);
     setPhase('prologue');
+    setPrologueLocale(locale);
     resetForNewVoyage();
   }, [
     clearGuideTimer,
     clearInactivityTimer,
     clearResetTimer,
+    locale,
     resetForNewVoyage,
     resetPrologueLaunch,
     stopVerse,
@@ -307,26 +311,45 @@ export default function App() {
       return;
     }
 
-    const handlePrologueLaunchInput = (event: KeyboardEvent) => {
-      if (event.repeat || !isRestartControlKey(event.code) || prologueLaunchTimerRef.current !== null) {
+    const handlePrologueKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || prologueLaunchTimerRef.current !== null) {
+        return;
+      }
+
+      if (isRestartControlKey(event.code)) {
+        event.preventDefault();
+        setPrologueSelectionKey(event.code);
+        setPrologueLocale(localeFromControlKey(event.code));
+        return;
+      }
+
+      if (!isSpaceKey(event)) {
         return;
       }
 
       event.preventDefault();
-      setPrologueLaunchKey(event.code);
+      setLocale(prologueLocale);
       setIsPrologueLaunching(true);
       clearPrologueLaunchTimer();
       prologueLaunchTimerRef.current = window.setTimeout(() => {
         prologueLaunchTimerRef.current = null;
-        startFlight();
+        startFlight(prologueLocale);
       }, PROLOGUE_LAUNCH_DELAY_MS);
     };
 
-    window.addEventListener('keydown', handlePrologueLaunchInput);
-    return () => {
-      window.removeEventListener('keydown', handlePrologueLaunchInput);
+    const handlePrologueKeyUp = (event: KeyboardEvent) => {
+      if (isRestartControlKey(event.code)) {
+        setPrologueSelectionKey((current) => (current === event.code ? null : current));
+      }
     };
-  }, [clearPrologueLaunchTimer, phase, startFlight]);
+
+    window.addEventListener('keydown', handlePrologueKeyDown);
+    window.addEventListener('keyup', handlePrologueKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handlePrologueKeyDown);
+      window.removeEventListener('keyup', handlePrologueKeyUp);
+    };
+  }, [clearPrologueLaunchTimer, phase, prologueLocale, startFlight]);
 
   useEffect(() => {
     if (phase !== 'flight') {
@@ -374,14 +397,14 @@ export default function App() {
 
       if (next.remaining === 1 && !hasRemainingOne && next.total > 1) {
         setHasRemainingOne(true);
-        publishVerse(TRIGGERS.remainingOne);
+        publishVerse(SPACE_COPY[locale].triggers.remainingOne);
       }
 
       if (next.remaining <= 0 && seedState.remaining > 0) {
         finishVoyage();
       }
     },
-    [finishVoyage, hasRemainingOne, phase, publishVerse, seedState.remaining],
+    [finishVoyage, hasRemainingOne, locale, phase, publishVerse, seedState.remaining],
   );
 
   const handleAimChange = useCallback(
@@ -390,32 +413,32 @@ export default function App() {
 
       if (!hasFirstAim) {
         setHasFirstAim(true);
-        publishVerse(TRIGGERS.firstAim);
+        publishVerse(SPACE_COPY[locale].triggers.firstAim);
       }
 
       if (!hasFirstLod && next.distance !== undefined && next.distance < CONFIG.TEXT_LOD_DISTANCE) {
         setHasFirstLod(true);
-        publishVerse(TRIGGERS.firstLod);
+        publishVerse(SPACE_COPY[locale].triggers.firstLod);
       }
     },
-    [hasFirstAim, hasFirstLod, publishVerse],
+    [hasFirstAim, hasFirstLod, locale, publishVerse],
   );
 
   const handlePlantHoldEvent = useCallback(
     (event: { type: 'start' | 'cancel' | 'complete'; target: StarSelectionData | null }) => {
       if (event.type === 'start') {
-        publishVerse(TRIGGERS.plantStart);
+        publishVerse(SPACE_COPY[locale].triggers.plantStart);
       }
       if (event.type === 'complete') {
-        publishVerse(TRIGGERS.plantComplete);
+        publishVerse(SPACE_COPY[locale].triggers.plantComplete);
       }
     },
-    [publishVerse],
+    [locale, publishVerse],
   );
 
   const handlePlantBlocked = useCallback(() => {
-    publishVerse(TRIGGERS.blocked);
-  }, [publishVerse]);
+    publishVerse(SPACE_COPY[locale].triggers.blocked);
+  }, [locale, publishVerse]);
 
   const handleSeedCommit = useCallback(
     (entry: { id?: number | string; word: string; color: string; params: StarSelectionData['params'] }) => {
@@ -427,15 +450,9 @@ export default function App() {
     [],
   );
 
-  const handleRestart = useCallback(() => {
-    clearResetTimer();
-    resetPrologueLaunch();
-    syncEndingRestartInput({ key: null, count: 0 });
-    setPhase('flight');
-    resetForNewVoyage();
-    beginControlGuide();
-    publishVerse(TRIGGERS.startFlight);
-  }, [beginControlGuide, clearResetTimer, publishVerse, resetForNewVoyage, resetPrologueLaunch, syncEndingRestartInput]);
+  const handleReturnToMainFromEnding = useCallback(() => {
+    returnToPrologue();
+  }, [returnToPrologue]);
 
   useEffect(() => {
     if (phase !== 'ending') {
@@ -458,7 +475,7 @@ export default function App() {
 
       if (next.count >= 2) {
         syncEndingRestartInput({ key: null, count: 0 });
-        handleRestart();
+        handleReturnToMainFromEnding();
         return;
       }
 
@@ -469,17 +486,18 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleEndingRestartInput);
     };
-  }, [handleRestart, phase, syncEndingRestartInput]);
+  }, [handleReturnToMainFromEnding, phase, syncEndingRestartInput]);
 
-  const prologueLines = PROLOGUE_SHORT;
   const endingRestartPrompt =
     endingRestartInput.key === null
-      ? '다음 항해자는 W / A / S / D 중 아무 키 하나를 2번 연속으로 누르세요.'
-      : `${RESTART_CONTROL_KEY_LABELS[endingRestartInput.key]} 키를 한 번 더 누르면 다음 항해가 시작됩니다.`;
-  const prologueLaunchPrompt =
-    prologueLaunchKey === null
-      ? 'W / A / S / D 중 아무 키를 누르면 1초 뒤 항해가 시작됩니다.'
-      : `${RESTART_CONTROL_KEY_LABELS[prologueLaunchKey]} 입력 감지. ${PROLOGUE_LAUNCH_DELAY_MS / 1000}초 뒤 출항합니다.`;
+      ? copy.ending.restartPromptIdle
+      : copy.ending.restartPromptActive(RESTART_CONTROL_KEY_LABELS[endingRestartInput.key]);
+  const prologueLaunchPrompt = isPrologueLaunching
+    ? prologueCopy.prologue.statusLaunching(
+        PROLOGUE_LAUNCH_DELAY_MS / 1000,
+        prologueCopy.languageOptions.find((option) => option.id === prologueLocale)?.label ?? prologueCopy.localeLabel,
+      )
+    : prologueCopy.prologue.statusIdle;
 
   const verseOverlay = verse ? (
     <div
@@ -524,9 +542,9 @@ export default function App() {
         maxWidth: 280,
       }}
     >
-      <div>남은 심기: {seedState.remaining} / {seedState.total}</div>
-      <div style={{ marginTop: 4 }}>조작: W/A/S/D + Space(0.9초 홀드)</div>
-      <div style={{ marginTop: 2 }}>Garden(큰 모니터)에 심기 상태가 즉시 갱신됩니다.</div>
+      <div>{copy.controlGuide.remainingSeeds(seedState.remaining, seedState.total)}</div>
+      <div style={{ marginTop: 4 }}>{copy.controlGuide.controls}</div>
+      <div style={{ marginTop: 2 }}>{copy.controlGuide.gardenSync}</div>
     </div>
   ) : null;
 
@@ -535,6 +553,7 @@ export default function App() {
       {phase === 'flight' && (
         <SpacePage
           key={voyageEpoch}
+          locale={locale}
           initialSeedLimit={seedLimit}
           onSeedStateChange={handleSeedStateChange}
           onSeedCommit={handleSeedCommit}
@@ -565,7 +584,7 @@ export default function App() {
         >
           <div className="prologue-launch-overlay" aria-hidden="true" />
           <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {prologueLines.map((line) => (
+            {prologueCopy.prologue.lines.map((line) => (
               <div key={line} style={{ fontSize: 22, lineHeight: 1.55, fontWeight: 300 }}>
                 {line}
               </div>
@@ -573,16 +592,40 @@ export default function App() {
           </div>
           <div className="prologue-kbd-stage">
             <div className="prologue-kbd-panel">
-              <PrologueWasdGlyph activeKey={prologueLaunchKey} launching={isPrologueLaunching} />
+              <PrologueWasdGlyph
+                activeKey={prologueSelectionKey}
+                launching={isPrologueLaunching}
+                ariaLabel={prologueCopy.prologue.keyboardAriaLabel}
+              />
               <div className="prologue-kbd-copy">
-                <div className="prologue-kbd-title">keyboard launch</div>
+                <div className="prologue-kbd-title">{prologueCopy.prologue.keyboardTitle}</div>
                 <div className="prologue-kbd-status">{prologueLaunchPrompt}</div>
-                <div className="prologue-kbd-meta">조작: W/A/S/D = 방향 변경, Space 0.9초 홀드 = 심기</div>
-                <div className="prologue-kbd-meta">심은 단어는 Garden 창에서 즉시 꽃으로 연결됩니다.</div>
+                <div className="prologue-language-panel">
+                  <div className="prologue-language-title">{prologueCopy.prologue.languageTitle}</div>
+                  <div className="prologue-language-options">
+                    {prologueCopy.languageOptions.map((option) => {
+                      const selected = option.id === prologueLocale;
+                      return (
+                        <div
+                          key={option.id}
+                          className={`prologue-language-option${selected ? ' is-selected' : ''}`}
+                          aria-selected={selected}
+                        >
+                          <div className="prologue-language-hint">{option.hint}</div>
+                          <div className="prologue-language-label">{option.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="prologue-kbd-meta">{prologueCopy.prologue.languageHint}</div>
+                  <div className="prologue-kbd-meta">{prologueCopy.prologue.confirmHint}</div>
+                </div>
+                <div className="prologue-kbd-meta">{prologueCopy.prologue.metaControls}</div>
+                <div className="prologue-kbd-meta">{prologueCopy.prologue.metaGarden}</div>
               </div>
             </div>
           </div>
-          <div className="prologue-seed-note">심기 가능 수: {clamp(seedLimit, 1, 10)}</div>
+          <div className="prologue-seed-note">{prologueCopy.prologue.seedNote(clamp(seedLimit, 1, 10))}</div>
         </div>
       )}
 
@@ -603,11 +646,11 @@ export default function App() {
             padding: 24,
           }}
         >
-          <div style={{ fontSize: 24, letterSpacing: 0.4 }}>항해가 기록되었습니다.</div>
+          <div style={{ fontSize: 24, letterSpacing: 0.4 }}>{copy.ending.title}</div>
           <div style={{ maxWidth: 680 }}>
-            심은 단어:
+            {copy.ending.plantedWords}
             {plantedWords.length === 0 ? (
-              <div style={{ opacity: 0.8, marginTop: 8 }}>이번 항해에서 심은 단어가 없습니다.</div>
+              <div style={{ opacity: 0.8, marginTop: 8 }}>{copy.ending.noWords}</div>
             ) : (
               <ul style={{ margin: '10px auto 0', paddingLeft: 18, textAlign: 'left', maxWidth: 420 }}>
                 {plantedWords.slice(-5).map((word, index) => (
@@ -616,12 +659,8 @@ export default function App() {
               </ul>
             )}
           </div>
-          <div style={{ opacity: 0.78, fontSize: 12 }}>
-            {endingRestartPrompt}
-          </div>
-          <div style={{ opacity: 0.56, fontSize: 11 }}>
-            {AUTO_END_RESET_MS / 1000}초 후에는 자동으로 다음 항해가 시작됩니다.
-          </div>
+          <div style={{ opacity: 0.78, fontSize: 12 }}>{endingRestartPrompt}</div>
+          <div style={{ opacity: 0.56, fontSize: 11 }}>{copy.ending.autoRestart(AUTO_END_RESET_MS / 1000)}</div>
         </div>
       )}
 
